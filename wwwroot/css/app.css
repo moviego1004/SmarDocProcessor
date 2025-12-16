@@ -129,6 +129,7 @@ html, body {
     align-items: center;
 }
 
+
 .popup-btn {
     cursor: pointer;
     padding: 4px 8px;
@@ -140,6 +141,7 @@ html, body {
     justify-content: center;
     color: #eee;
 }
+
 .popup-btn:hover { background: #555; color: white; }
 
 .textLayer span { color: transparent; position: absolute; white-space: pre; cursor: text; transform-origin: 0% 0%; }
