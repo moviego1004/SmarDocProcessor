@@ -82,17 +82,22 @@
                 if (e.ctrlKey && (e.key === 'z' || e.key === 'Z')) pdfState.dotNetRef.invokeMethodAsync('OnUndo');
             });
 
-            // [핵심] 텍스트 선택 감지 강화 (Debounce 적용)
+            // [수정] 텍스트 선택 감지 (모드 분리로 인해 충돌 없음)
             document.addEventListener('selectionchange', () => {
-                if (selectionTimeout) clearTimeout(selectionTimeout);
-                selectionTimeout = setTimeout(() => {
-                    handleTextSelection();
-                }, 300);
+                // 선택 영역이 없으면 팝업 닫기 요청
+                var selection = window.getSelection();
+                if (!selection || selection.rangeCount === 0 || selection.toString().trim().length === 0) {
+                   if(pdfState.dotNetRef) pdfState.dotNetRef.invokeMethodAsync('OnTextSelectionCleared');
+                }
             });
 
+            // [핵심] 마우스를 뗐을 때 선택된 텍스트가 있으면 좌표를 보냄
             document.addEventListener('mouseup', (e) => {
                 if (e.target.closest('.selection-popup')) return;
-                setTimeout(handleTextSelection, 50);
+                
+                setTimeout(() => {
+                    handleTextSelection(e.clientX, e.clientY); // 마우스 좌표 직접 전달
+                }, 50);
             });
         };
 
@@ -157,31 +162,38 @@
         
         window.downloadFile = (filename, base64Content) => { var link = document.createElement('a'); link.download = filename; link.href = "data:application/pdf;base64," + base64Content; document.body.appendChild(link); link.click(); document.body.removeChild(link); };
         
-        function handleTextSelection() {
+        // [수정] 좌표 계산 로직 단순화 (화면 기준 고정 좌표 사용)
+        function handleTextSelection(mouseX, mouseY) {
             if (!pdfState.dotNetRef) return;
             var selection = window.getSelection();
+            
             if (selection && selection.toString().trim().length > 0) {
                 try {
-                    var range = selection.getRangeAt(0);
-                    var rect = range.getBoundingClientRect();
-                    var container = document.getElementById('pdf-container');
-                    var containerRect = container.getBoundingClientRect();
-                    
+                    // 선택된 텍스트가 어느 페이지에 있는지 확인
                     var anchorNode = selection.anchorNode;
                     if (anchorNode.nodeType === 3) anchorNode = anchorNode.parentNode;
                     var pageEl = anchorNode.closest('.page-container');
                     
                     if (pageEl) {
                         var pageNum = parseInt(pageEl.getAttribute('data-page-number'));
-                        if (pageNum > 0) {
-                            var x = rect.left - containerRect.left + container.scrollLeft;
-                            var y = rect.top - containerRect.top + container.scrollTop;
-                            pdfState.dotNetRef.invokeMethodAsync('OnTextSelected', x, y, rect.width, rect.height, pageNum, selection.toString());
-                        }
+                        
+                        // 하이라이트 저장을 위한 PDF 내부 상대 좌표 계산
+                        var range = selection.getRangeAt(0);
+                        var rect = range.getBoundingClientRect();
+                        var container = document.getElementById('pdf-container');
+                        var containerRect = container.getBoundingClientRect();
+                        
+                        var relativeX = rect.left - containerRect.left + container.scrollLeft;
+                        var relativeY = rect.top - containerRect.top + container.scrollTop;
+
+                        // C#으로 전송 (화면 좌표 mouseX/Y는 팝업 위치용, relativeX/Y는 저장용)
+                        // 만약 mouseX가 없으면(키보드 선택 등) rect 기준 사용
+                        var popupX = mouseX || rect.right;
+                        var popupY = mouseY || rect.top;
+
+                        pdfState.dotNetRef.invokeMethodAsync('OnTextSelected', popupX, popupY, relativeX, relativeY, rect.width, rect.height, pageNum, selection.toString());
                     }
-                } catch (e) { }
-            } else {
-                pdfState.dotNetRef.invokeMethodAsync('OnTextSelectionCleared');
+                } catch (e) { console.error(e); }
             }
         }
     </script>

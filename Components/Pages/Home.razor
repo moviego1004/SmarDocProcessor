@@ -38,6 +38,8 @@
             
             <button class="icon-btn" @onclick="GenerateSearchablePdf" disabled="@(activeDoc == null || isOcrProcessing)" title="전체 페이지를 스캔하여 검색 가능하게 만듭니다.">👁️ <span class="btn-label">OCR(전체)</span></button>
             
+            <button class="icon-btn @(activeMode == "INFO" ? "active" : "")" @onclick='() => SetMode("INFO")' disabled="@(activeDoc == null)" title="텍스트 선택 및 팝업 메뉴">👆 <span class="btn-label">선택(읽기)</span></button>
+            <div class="divider"></div>
             <button class="icon-btn @(activeMode == "SNAPSHOT" ? "active" : "")" @onclick='() => SetMode("SNAPSHOT")' disabled="@(activeDoc == null)">📷 <span class="btn-label">캡처</span></button>
             <button class="icon-btn @(activeMode == "TEXT" ? "active" : "")" @onclick='() => SetMode("TEXT")' disabled="@(activeDoc == null)">T <span class="btn-label">텍스트</span></button>
             <button class="icon-btn @(activeMode == "HIGHLIGHT" ? "active" : "")" @onclick='() => SetMode("HIGHLIGHT")' disabled="@(activeDoc == null)">🖍️ <span class="btn-label">형광펜(박스)</span></button>
@@ -110,10 +112,10 @@
                         <p><strong>페이지:</strong> @activeDoc.TotalPages</p>
                         <hr />
                         <div class="alert alert-light small border">
-                            <strong>가이드:</strong><br/>
-                            👁️ <strong>OCR:</strong> 전체 검색 가능한 PDF 변환<br/>
-                            🖱️ <strong>선택:</strong> 텍스트 드래그 -> 팝업 메뉴<br/>
-                            🖍️ <strong>형광펜:</strong> 드래그하여 박스 그리기<br/>
+                            <strong>모드 안내:</strong><br/>
+                            👆 <strong>선택(읽기):</strong> 텍스트 선택, 팝업 메뉴<br/>
+                            🖍️ <strong>형광펜/캡처:</strong> 드래그하여 박스 그리기<br/>
+                            <span class="text-danger small">(형광펜 모드에선 텍스트 선택 안됨)</span>
                         </div>
                     }
                 </div>
@@ -135,7 +137,7 @@
         </div>
         <div class="splitter" @onmousedown="StartResizeSidebar"><div class="splitter-toggle-btn" @onmousedown:stopPropagation="true" @onclick="ToggleSidebar">◀</div></div>
 
-        <div id="pdf-container" class="@(activeMode == "HIGHLIGHT" || activeMode == "SNAPSHOT" ? "drawing-mode" : "")">
+        <div id="pdf-container" class="@(IsEditMode ? "editing-mode" : "reading-mode")">
             @if (activeDoc != null) {
                 @for (int i = 1; i <= activeDoc.TotalPages; i++) {
                     int pageNum = i;
@@ -210,6 +212,9 @@
     private List<PdfDocumentModel> docs = new List<PdfDocumentModel>();
     private PdfDocumentModel? activeDoc = null;
     private string activeMode = "INFO";
+    // [추가] 편집 모드 여부 확인 속성
+    private bool IsEditMode => activeMode == "HIGHLIGHT" || activeMode == "SNAPSHOT" || activeMode == "TEXT";
+
     private string activeTab = "PROP";
     private string currentInputColor = "#000000";
     private int currentInputFontSize = 16;
@@ -250,21 +255,22 @@
     }
 
     private void ToggleMoreMenu() { showMoreMenu = !showMoreMenu; }
-    private void CloseMenus() { showMoreMenu = false; CloseContextMenu(); }
+    private void CloseMenus() { showMoreMenu = false; showSelectionPopup = false; CloseContextMenu(); }
 
-    // [중요 수정] 사이드바 오프셋 제거 (팝업은 이미 컨테이너 내부에 있으므로)
-    [JSInvokable] public void OnTextSelected(double conX, double conY, double pgX, double pgY, double w, double h, int pageNum, string text) {
+    // [수정] JS에서 받은 화면 좌표(fixed)를 그대로 사용하여 팝업 표시
+    [JSInvokable] 
+    public void OnTextSelected(double clientX, double clientY, double pdfX, double pdfY, double w, double h, int pageNum, string text) {
         if (activeDoc == null) return;
-        
-        // 팝업 X 위치: JS에서 전달받은 conX를 그대로 사용 (이미 컨테이너 내부 좌표임)
-        popupX = conX; 
-        
-        // 팝업 Y 위치 보정
-        popupY = conY - 45;
-        if (popupY < 0) popupY = 5;
-        
-        selX = pgX / activeDoc.Scale; 
-        selY = pgY / activeDoc.Scale; 
+        if (activeMode != "INFO" && activeMode != "TEXT") return; // 형광펜 모드일 땐 팝업 안 뜨게 안전장치
+
+        // 팝업 위치 설정 (마우스 위치 약간 위)
+        popupX = clientX; 
+        popupY = clientY - 50;
+        if (popupY < 10) popupY = clientY + 20; // 화면 위쪽이면 아래로 표시
+
+        // 데이터 저장용 좌표 (PDF 내부 좌표)
+        selX = pdfX / activeDoc.Scale; 
+        selY = pdfY / activeDoc.Scale; 
         selW = w / activeDoc.Scale; 
         selH = h / activeDoc.Scale;
         
@@ -399,7 +405,7 @@
                 SaveState();
                 activeDoc.Annotations.Add(new AnnotationData { Type="HIGHLIGHT", X=x/activeDoc.Scale, Y=y/activeDoc.Scale, Width=w/activeDoc.Scale, Height=h/activeDoc.Scale, Page=drawingPage }); 
             } 
-            isDrawingHighlight = false; drawingPage = -1; activeMode="INFO";
+            isDrawingHighlight = false; drawingPage = -1; activeMode="INFO"; // 그리기 후 자동 선택 모드 복귀
         } else if (isSnapshotMode && activeDoc != null) { 
             if (w > 5 && h > 5) { 
                 await JS.InvokeVoidAsync("copySnapshot", x, y, w, h, drawingPage);
