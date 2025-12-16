@@ -12,7 +12,7 @@ html, body {
     height: 50px; background: #f3f2f1; border-bottom: 1px solid #ccc;
     display: flex; align-items: center; padding: 0 10px; gap: 5px;
     flex-shrink: 0; position: relative; z-index: 30; 
-    white-space: nowrap; overflow: visible; /* 메뉴 튀어나옴 허용 */
+    white-space: nowrap; overflow: visible;
 }
 .tool-section { display: flex; align-items: center; gap: 4px; }
 .divider { width: 1px; height: 24px; background: #ccc; margin: 0 8px; }
@@ -46,7 +46,6 @@ html, body {
     cursor: pointer; border: none; background: transparent; 
 }
 
-/* 1100px 이하에서 메뉴 숨기고 더보기 버튼 보이기 */
 @media (max-width: 1100px) {
     .responsive-hide { display: none !important; }
     .more-btn { display: block !important; }
@@ -95,40 +94,18 @@ html, body {
 .page-container { margin-bottom: 20px; position: relative; }
 .page-wrapper { position: relative; background-color: white; box-shadow: 0 4px 8px rgba(0,0,0,0.3); }
 
-/* Canvas (PDF 이미지) */
-.page-wrapper canvas {
-    position: absolute; left: 0; top: 0;
-    z-index: 1;
-}
+.page-wrapper canvas { position: absolute; left: 0; top: 0; z-index: 1; }
 
-/* [중요] 텍스트 레이어 (선택 가능하게) */
 .textLayer { 
     position: absolute; left: 0; top: 0; right: 0; bottom: 0;
-    z-index: 5; /* 캔버스 위 */
-    overflow: hidden;
-    line-height: 1.0;
-    opacity: 1;
-    pointer-events: auto;
-    /* 드래그 허용 (Body의 none을 무시) */
-    user-select: text !important;
-    -webkit-user-select: text !important;
+    z-index: 5; overflow: hidden; line-height: 1.0; opacity: 1;
+    pointer-events: auto; user-select: text !important; -webkit-user-select: text !important;
 }
-
-/* 텍스트 투명 처리 */
-.textLayer span {
-    color: transparent; 
-    position: absolute;
-    white-space: pre;
-    cursor: text;
-    transform-origin: 0% 0%;
-}
-
-/* 선택 시 하이라이트 */
+.textLayer span { color: transparent; position: absolute; white-space: pre; cursor: text; transform-origin: 0% 0%; }
 .textLayer ::selection { background: rgba(0, 0, 255, 0.3); color: transparent; }
 
 .search-match { background-color: yellow; border-radius: 2px; color: transparent; }
 .search-match.current { background-color: orange; border: 1px solid darkorange; }
-
 .annotation-container.selected { border: 1px solid #0078d4; z-index: 100; }
 .search-bar { position: absolute; top: 60px; right: 20px; z-index: 2000; background: white; border: 1px solid #ccc; padding: 5px 10px; border-radius: 4px; box-shadow: 0 4px 8px rgba(0,0,0,0.2); display: flex; align-items: center; gap: 5px; }
 .search-bar input { border: 1px solid #ddd; padding: 3px; font-size: 13px; width: 150px; }
@@ -139,16 +116,53 @@ html, body {
 .animate-fade-in { animation: fadeIn 0.2s ease-in-out; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
 
-/* 팝업 메뉴 */
+/* [수정] 플로팅 툴바 스타일 (캡처 이미지와 유사하게) */
 .selection-popup {
-    position: absolute; background: #333; color: white;
-    border-radius: 4px; padding: 5px; display: flex; gap: 8px;
-    z-index: 9999; box-shadow: 0 2px 10px rgba(0,0,0,0.3); font-size: 12px; align-items: center;
+    position: absolute;
+    background: #444; /* 다크 그레이 배경 */
+    color: white;
+    border-radius: 6px;
+    padding: 6px 10px;
+    display: flex;
+    gap: 8px;
+    z-index: 9999;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+    align-items: center;
 }
+
+/* 툴바 아래쪽 화살표 */
 .selection-popup::after {
-    content: ""; position: absolute; top: 100%; left: 50%; margin-left: -5px;
-    border-width: 5px; border-style: solid; border-color: #333 transparent transparent transparent;
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    margin-left: -6px;
+    border-width: 6px;
+    border-style: solid;
+    border-color: #444 transparent transparent transparent;
 }
-.popup-btn { cursor: pointer; padding: 2px 6px; border-radius: 2px; display: flex; align-items: center; }
-.popup-btn:hover { background: #555; }
-.color-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+
+/* 툴바 아이콘 버튼 */
+.popup-btn {
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #eee;
+    font-size: 16px; /* 아이콘 크기 */
+    transition: background 0.2s;
+}
+
+.popup-btn:hover {
+    background: #666;
+    color: white;
+}
+
+.popup-divider {
+    width: 1px;
+    height: 18px;
+    background: #666;
+    margin: 0 2px;
+}

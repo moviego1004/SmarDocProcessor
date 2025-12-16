@@ -58,6 +58,7 @@
                 }
             </div>
         </div>
+        
         <button class="more-btn" @onclick="ToggleMoreMenu" @onclick:stopPropagation="true" style="margin-left:auto;">⋮</button>
     </div>
 
@@ -111,7 +112,7 @@
                         <div class="alert alert-light small border">
                             <strong>가이드:</strong><br/>
                             👁️ <strong>OCR:</strong> 전체 페이지를 검색 가능한 PDF로 변환<br/>
-                            🖱️ <strong>선택:</strong> 텍스트 드래그 또는 우클릭 -> 팝업 메뉴<br/>
+                            🖱️ <strong>선택:</strong> 텍스트 드래그 -> 팝업 메뉴<br/>
                         </div>
                     }
                 </div>
@@ -133,7 +134,7 @@
         </div>
         <div class="splitter" @onmousedown="StartResizeSidebar"><div class="splitter-toggle-btn" @onmousedown:stopPropagation="true" @onclick="ToggleSidebar">◀</div></div>
 
-        <div id="pdf-container" class="@(activeMode != "INFO" ? "edit-mode" : "")">
+        <div id="pdf-container" class="@(activeMode == "HIGHLIGHT" || activeMode == "SNAPSHOT" ? "drawing-mode" : "")">
             @if (activeDoc != null) {
                 @for (int i = 1; i <= activeDoc.TotalPages; i++) {
                     int pageNum = i; 
@@ -164,11 +165,11 @@
                 
                 @if (showSelectionPopup) {
                     <div class="selection-popup" style="left:@(popupX)px; top:@(popupY)px;" @onmousedown:stopPropagation="true">
-                        <div class="popup-btn" @onclick="CopySelection">📄 복사</div>
-                        <div style="width:1px; height:10px; background:#666;"></div>
-                        <div class="popup-btn" @onclick='() => HighlightSelection("HIGHLIGHT_Y")'><span class="color-dot" style="background:yellow;"></span></div>
-                        <div class="popup-btn" @onclick='() => HighlightSelection("HIGHLIGHT_O")'><span class="color-dot" style="background:orange;"></span></div>
-                        <div class="popup-btn" @onclick='() => HighlightSelection("UNDERLINE")'><span style="text-decoration:underline; color:white;">가</span></div>
+                        <div class="popup-btn" @onclick='() => HighlightSelection("HIGHLIGHT_Y")' title="형광펜 (노랑)">🟡</div>
+                        <div class="popup-btn" @onclick='() => HighlightSelection("HIGHLIGHT_O")' title="형광펜 (주황)">🟠</div>
+                        <div class="popup-btn" @onclick='() => HighlightSelection("UNDERLINE")' title="밑줄"><u>U</u></div>
+                        <div class="popup-divider"></div>
+                        <div class="popup-btn" @onclick="CopySelection" title="복사">📋</div>
                     </div>
                 }
             } else { <div class="d-flex align-items-center justify-content-center h-100 text-muted"><h3>파일을 열어주세요.</h3></div> }
@@ -251,11 +252,10 @@
     [JSInvokable] public void OnTextSelected(double conX, double conY, double pgX, double pgY, double w, double h, int pageNum, string text) {
         if (activeDoc == null) return;
         
-        // 팝업 위치 (화면 기준)
-        popupX = conX; 
-        popupY = conY + 50; 
+        double offsetX = isSidebarOpen ? sidebarWidth : 0;
+        popupX = conX + offsetX; 
+        popupY = conY - 45; 
         
-        // 저장 데이터 (페이지 원본 기준 - Unscaled)
         selX = pgX / activeDoc.Scale; 
         selY = pgY / activeDoc.Scale; 
         selW = w / activeDoc.Scale; 
@@ -277,7 +277,6 @@
     private void HighlightSelection(string type) {
         if(activeDoc != null) {
             SaveState();
-            // Unscaled 좌표 그대로 저장
             activeDoc.Annotations.Add(new AnnotationData { Type = type, X = selX, Y = selY, Width = selW, Height = selH, Page = selectedPageNum });
             showSelectionPopup = false;
         }
@@ -314,7 +313,6 @@
                         totalWords += results.Count;
 
                         foreach(var res in results) {
-                            // OCR은 3배 확대, 뷰어는 1.0 기준 -> 3.0으로 나눔 (Unscaled)
                             activeDoc.Annotations.Add(new AnnotationData {
                                 Type = "OCR_TEXT",
                                 Content = res.Text,
