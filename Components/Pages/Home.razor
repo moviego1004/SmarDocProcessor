@@ -40,7 +40,7 @@
             
             <button class="icon-btn @(activeMode == "SNAPSHOT" ? "active" : "")" @onclick='() => SetMode("SNAPSHOT")' disabled="@(activeDoc == null)">📷 <span class="btn-label">캡처</span></button>
             <button class="icon-btn @(activeMode == "TEXT" ? "active" : "")" @onclick='() => SetMode("TEXT")' disabled="@(activeDoc == null)">T <span class="btn-label">텍스트</span></button>
-            <button class="icon-btn @(activeMode == "HIGHLIGHT" ? "active" : "")" @onclick='() => SetMode("HIGHLIGHT")' disabled="@(activeDoc == null)">🖍️ <span class="btn-label">형광펜</span></button>
+            <button class="icon-btn @(activeMode == "HIGHLIGHT" ? "active" : "")" @onclick='() => SetMode("HIGHLIGHT")' disabled="@(activeDoc == null)">🖍️ <span class="btn-label">형광펜(박스)</span></button>
         </div>
         
         <div class="tool-section responsive-hide" style="margin-left:auto; margin-right:10px;">
@@ -111,8 +111,9 @@
                         <hr />
                         <div class="alert alert-light small border">
                             <strong>가이드:</strong><br/>
-                            👁️ <strong>OCR:</strong> 전체 페이지를 검색 가능한 PDF로 변환<br/>
+                            👁️ <strong>OCR:</strong> 검색 가능한 PDF 변환<br/>
                             🖱️ <strong>선택:</strong> 텍스트 드래그 -> 팝업 메뉴<br/>
+                            🖍️ <strong>형광펜:</strong> 드래그하여 박스 그리기<br/>
                         </div>
                     }
                 </div>
@@ -134,10 +135,10 @@
         </div>
         <div class="splitter" @onmousedown="StartResizeSidebar"><div class="splitter-toggle-btn" @onmousedown:stopPropagation="true" @onclick="ToggleSidebar">◀</div></div>
 
-        <div id="pdf-container" class="@(activeMode == "HIGHLIGHT" || activeMode == "SNAPSHOT" ? "drawing-mode" : "")">
+        <div id="pdf-container" class="@(activeMode == "SNAPSHOT" ? "drawing-mode" : "")">
             @if (activeDoc != null) {
                 @for (int i = 1; i <= activeDoc.TotalPages; i++) {
-                    int pageNum = i; 
+                    int pageNum = i;
                     <div id="anchor-page-@pageNum" class="page-container" data-page-number="@pageNum" style="margin-bottom: 20px;">
                         <div id="page-wrapper-@pageNum" class="page-wrapper" @onmousedown="@(e => OnPageMouseDown(e, pageNum))" @onmousemove="@(e => OnPageMouseMove(e, pageNum))" style="position: relative;">
                             <canvas id="canvas-@pageNum"></canvas>
@@ -210,18 +211,20 @@
     private PdfDocumentModel? activeDoc = null;
     private string activeMode = "INFO";
     private string activeTab = "PROP";
-    private string currentInputColor = "#000000"; 
+    private string currentInputColor = "#000000";
     private int currentInputFontSize = 16;
     private int sidebarWidth = 250; private bool isSidebarOpen = true; private bool isSidebarResizing = false;
     private AnnotationData? draggingAnnotation = null; private double lastMouseX, lastMouseY;
     private bool isDrawingHighlight = false; private bool isSnapshotMode = false;
     private int drawingPage = -1; private double drawStartX, drawStartY, drawCurX, drawCurY;
-    private bool isContextMenuVisible = false; private double contextMenuX, contextMenuY; private int contextMenuTargetPage = -1;
-    private bool showSearchBar = false; private string searchQuery = ""; private int searchResultCount = 0; private int currentSearchIndex = 0;
+    private bool isContextMenuVisible = false; private double contextMenuX, contextMenuY;
+    private int contextMenuTargetPage = -1;
+    private bool showSearchBar = false; private string searchQuery = ""; private int searchResultCount = 0;
+    private int currentSearchIndex = 0;
     
     private bool showMoreMenu = false;
     private double thumbnailScale = 0.2;
-    private Timer? zoomTimer; 
+    private Timer? zoomTimer;
     private bool isRendering = false;
     private DotNetObjectReference<Home>? dotNetRef;
 
@@ -238,7 +241,7 @@
     protected override async Task OnAfterRenderAsync(bool firstRender) {
         if (firstRender) { 
             try { 
-                dotNetRef = DotNetObjectReference.Create(this); 
+                dotNetRef = DotNetObjectReference.Create(this);
                 await JS.InvokeVoidAsync("initPdfViewer", dotNetRef); 
                 zoomTimer = new Timer(100); zoomTimer.AutoReset = false;
                 zoomTimer.Elapsed += async (s, e) => { await InvokeAsync(async () => { await RenderAllPages(); isRendering = false; StateHasChanged(); }); };
@@ -247,24 +250,36 @@
     }
 
     private void ToggleMoreMenu() { showMoreMenu = !showMoreMenu; }
-    private void CloseMenus() { showMoreMenu = false; showSelectionPopup = false; CloseContextMenu(); }
+    private void CloseMenus() { showMoreMenu = false; CloseContextMenu(); } // 팝업 닫기는 JS에서 처리하도록 위임하거나 별도 처리
 
     [JSInvokable] public void OnTextSelected(double conX, double conY, double pgX, double pgY, double w, double h, int pageNum, string text) {
         if (activeDoc == null) return;
         
+        // 사이드바 너비 보정
         double offsetX = isSidebarOpen ? sidebarWidth : 0;
+        
         popupX = conX + offsetX; 
-        popupY = conY - 45; 
+        // 팝업이 너무 위로 가면 아래로 표시
+        if (popupY < 0) popupY = 10;
+        
+        popupY = conY - 45;
         
         selX = pgX / activeDoc.Scale; 
         selY = pgY / activeDoc.Scale; 
         selW = w / activeDoc.Scale; 
-        selH = h / activeDoc.Scale; 
+        selH = h / activeDoc.Scale;
         
         selectedPageNum = pageNum; selectedText = text;
-        showSelectionPopup = true; StateHasChanged();
+        showSelectionPopup = true; 
+        StateHasChanged();
     }
-    [JSInvokable] public void OnTextSelectionCleared() { showSelectionPopup = false; StateHasChanged(); }
+    
+    [JSInvokable] public void OnTextSelectionCleared() { 
+        if (showSelectionPopup) {
+            showSelectionPopup = false; 
+            StateHasChanged();
+        }
+    }
     
     private async Task CopySelection() { 
         await System.Windows.Application.Current.Dispatcher.InvokeAsync(() => {
@@ -284,7 +299,6 @@
 
     private async Task GenerateSearchablePdf() {
         if (activeDoc == null) return;
-        
         isOcrProcessing = true;
         ocrProgressPercent = 0;
         StateHasChanged();
@@ -318,7 +332,7 @@
                                 Content = res.Text,
                                 X = res.X / 3.0, Y = res.Y / 3.0, Width = res.Width / 3.0, Height = res.Height / 3.0,
                                 Page = i
-                            });
+                             });
                         }
                     }
                 }
@@ -331,7 +345,6 @@
                     byte[] newPdfData = PdfService.SavePdfWithAnnotations(activeDoc.Data, activeDoc.Annotations, activeDoc.Scale);
                     activeDoc.Data = newPdfData;
                     activeDoc.Annotations.RemoveAll(a => a.Type == "OCR_TEXT");
-
                     activeDoc.TotalPages = await JS.InvokeAsync<int>("loadPdfDocument", activeDoc.Data);
                     await RenderAllPages();
                     
@@ -341,7 +354,7 @@
                 }
 
             } catch (Exception ex) { 
-                await JS.InvokeVoidAsync("alert", "OCR 오류: " + ex.Message); 
+                await JS.InvokeVoidAsync("alert", "OCR 오류: " + ex.Message);
             } finally {
                 isOcrProcessing = false;
                 StateHasChanged();
@@ -359,57 +372,130 @@
                 var loadedAnns = PdfService.ExtractAnnotationsFromMetadata(newDoc.Data);
                 if (loadedAnns != null && loadedAnns.Count > 0) newDoc.Annotations = loadedAnns;
                 int lastPage = HistoryService.GetLastPage(newDoc.FilePath);
-                docs.Add(newDoc); activeDoc = newDoc;
+                docs.Add(newDoc);
+                activeDoc = newDoc;
                 activeDoc.TotalPages = await JS.InvokeAsync<int>("loadPdfDocument", activeDoc.Data);
                 StateHasChanged(); await Task.Delay(100); await RenderAllPages(); await JS.InvokeVoidAsync("registerZoomEvent", "pdf-container"); await JS.InvokeVoidAsync("setupPageObserver");
                 if (lastPage > 1 && lastPage <= activeDoc.TotalPages) await ScrollToPage(lastPage);
-            } catch (Exception ex) { await JS.InvokeVoidAsync("alert", "열기 실패: " + ex.Message); }
+            } catch (Exception ex) { await JS.InvokeVoidAsync("alert", "열기 실패: " + ex.Message);
+            }
         }
     }
     
-    private async Task SwitchTab(PdfDocumentModel doc) { if (activeDoc == doc) return; activeDoc = doc; await JS.InvokeAsync<int>("loadPdfDocument", activeDoc.Data); StateHasChanged(); await Task.Delay(50); await RenderAllPages(); await RenderThumbnails(); await JS.InvokeVoidAsync("setupPageObserver"); await ScrollToPage(activeDoc.CurrentPage); }
-    private void CloseTab(PdfDocumentModel doc) { docs.Remove(doc); if (activeDoc == doc) { activeDoc = docs.FirstOrDefault(); if (activeDoc != null) SwitchTab(activeDoc); else StateHasChanged(); } }
+    private async Task SwitchTab(PdfDocumentModel doc) { if (activeDoc == doc) return;
+        activeDoc = doc; await JS.InvokeAsync<int>("loadPdfDocument", activeDoc.Data); StateHasChanged(); await Task.Delay(50); await RenderAllPages(); await RenderThumbnails(); await JS.InvokeVoidAsync("setupPageObserver"); await ScrollToPage(activeDoc.CurrentPage);
+    }
+    private void CloseTab(PdfDocumentModel doc) { docs.Remove(doc); if (activeDoc == doc) { activeDoc = docs.FirstOrDefault();
+        if (activeDoc != null) SwitchTab(activeDoc); else StateHasChanged(); } }
     
-    private async Task OnGlobalMouseUp(MouseEventArgs e) { if (isSidebarResizing) isSidebarResizing = false; if (draggingAnnotation != null) { draggingAnnotation = null; SaveState(); } double x = Math.Min(drawStartX, drawCurX); double y = Math.Min(drawStartY, drawCurY); double w = Math.Abs(drawCurX - drawStartX); double h = Math.Abs(drawCurY - drawStartY); if (isDrawingHighlight && activeDoc != null) { if (w > 5 && h > 5) { SaveState(); activeDoc.Annotations.Add(new AnnotationData { Type="HIGHLIGHT", X=x/activeDoc.Scale, Y=y/activeDoc.Scale, Width=w/activeDoc.Scale, Height=h/activeDoc.Scale, Page=drawingPage }); } isDrawingHighlight = false; drawingPage = -1; activeMode="INFO"; } else if (isSnapshotMode && activeDoc != null) { if (w > 5 && h > 5) { await JS.InvokeVoidAsync("copySnapshot", x, y, w, h, drawingPage); await System.Windows.Application.Current.Dispatcher.InvokeAsync(async () => { if (Clipboard.ContainsImage()) { var bitmap = Clipboard.GetImage(); byte[] imgBytes; var pngEncoder = new PngBitmapEncoder(); pngEncoder.Frames.Add(BitmapFrame.Create(bitmap)); using (var ms = new MemoryStream()) { pngEncoder.Save(ms); imgBytes = ms.ToArray(); } string extractedText = await OcrService.ExtractTextFromImage(imgBytes); if (!string.IsNullOrWhiteSpace(extractedText)) { Clipboard.SetText(extractedText); await JS.InvokeVoidAsync("alert", $"[캡처 완료]\n텍스트 복사됨:\n\n{extractedText}"); } else { await JS.InvokeVoidAsync("alert", "OCR: 글자 없음"); } } }); } isSnapshotMode = false; drawingPage = -1; activeMode = "INFO"; } }
+    private async Task OnGlobalMouseUp(MouseEventArgs e) { 
+        if (isSidebarResizing) isSidebarResizing = false;
+        if (draggingAnnotation != null) { draggingAnnotation = null; SaveState(); } 
+        
+        double x = Math.Min(drawStartX, drawCurX); double y = Math.Min(drawStartY, drawCurY);
+        double w = Math.Abs(drawCurX - drawStartX); double h = Math.Abs(drawCurY - drawStartY);
+        
+        if (isDrawingHighlight && activeDoc != null) { 
+            // 너무 작은 드래그는 무시 (클릭 실수 방지)
+            if (w > 5 && h > 5) { 
+                SaveState();
+                activeDoc.Annotations.Add(new AnnotationData { Type="HIGHLIGHT", X=x/activeDoc.Scale, Y=y/activeDoc.Scale, Width=w/activeDoc.Scale, Height=h/activeDoc.Scale, Page=drawingPage }); 
+            } 
+            isDrawingHighlight = false; drawingPage = -1; activeMode="INFO";
+        } else if (isSnapshotMode && activeDoc != null) { 
+            if (w > 5 && h > 5) { 
+                await JS.InvokeVoidAsync("copySnapshot", x, y, w, h, drawingPage);
+                await System.Windows.Application.Current.Dispatcher.InvokeAsync(async () => { if (Clipboard.ContainsImage()) { var bitmap = Clipboard.GetImage(); byte[] imgBytes; var pngEncoder = new PngBitmapEncoder(); pngEncoder.Frames.Add(BitmapFrame.Create(bitmap)); using (var ms = new MemoryStream()) { pngEncoder.Save(ms); imgBytes = ms.ToArray(); } string extractedText = await OcrService.ExtractTextFromImage(imgBytes); if (!string.IsNullOrWhiteSpace(extractedText)) { Clipboard.SetText(extractedText); await JS.InvokeVoidAsync("alert", $"[캡처 완료]\n텍스트 복사됨:\n\n{extractedText}"); } else { await JS.InvokeVoidAsync("alert", "OCR: 글자 없음"); } } });
+            } 
+            isSnapshotMode = false; drawingPage = -1; activeMode = "INFO";
+        } 
+    }
     
-    [JSInvokable] public async Task OnPageVisible(int pageNum) { if (activeDoc != null && activeDoc.CurrentPage != pageNum) { activeDoc.CurrentPage = pageNum; HistoryService.SaveLastPage(activeDoc.FilePath, pageNum); StateHasChanged(); if (activeTab == "PAGES") await JS.InvokeVoidAsync("scrollThumbnailIntoView", pageNum); } }
+    [JSInvokable] public async Task OnPageVisible(int pageNum) { if (activeDoc != null && activeDoc.CurrentPage != pageNum) { activeDoc.CurrentPage = pageNum;
+        HistoryService.SaveLastPage(activeDoc.FilePath, pageNum); StateHasChanged(); if (activeTab == "PAGES") await JS.InvokeVoidAsync("scrollThumbnailIntoView", pageNum);
+    } }
     
-    private void SaveState() { if (activeDoc == null) return; var json = JsonSerializer.Serialize(activeDoc.Annotations); activeDoc.UndoStack.Push(json); if (activeDoc.UndoStack.Count > 20) { var temp = activeDoc.UndoStack.ToArray(); activeDoc.UndoStack.Clear(); for(int i=19; i>=0; i--) activeDoc.UndoStack.Push(temp[i]); } }
+    private void SaveState() { if (activeDoc == null) return;
+        var json = JsonSerializer.Serialize(activeDoc.Annotations); activeDoc.UndoStack.Push(json); if (activeDoc.UndoStack.Count > 20) { var temp = activeDoc.UndoStack.ToArray(); activeDoc.UndoStack.Clear(); for(int i=19; i>=0; i--) activeDoc.UndoStack.Push(temp[i]);
+    } }
     [JSInvokable] public void OnUndo() => Undo();
-    private void Undo() { if (activeDoc != null && activeDoc.UndoStack.Count > 0) { var json = activeDoc.UndoStack.Pop(); activeDoc.Annotations = JsonSerializer.Deserialize<List<AnnotationData>>(json) ?? new List<AnnotationData>(); activeDoc.SelectedAnnotation = null; StateHasChanged(); } }
+    private void Undo() { if (activeDoc != null && activeDoc.UndoStack.Count > 0) { var json = activeDoc.UndoStack.Pop();
+        activeDoc.Annotations = JsonSerializer.Deserialize<List<AnnotationData>>(json) ?? new List<AnnotationData>(); activeDoc.SelectedAnnotation = null; StateHasChanged();
+    } }
     
-    [JSInvokable] public void OnZoomIn() => RequestZoom(0.1); [JSInvokable] public void OnZoomOut() => RequestZoom(-0.1);
-    private void RequestZoom(double delta) { if (activeDoc == null) return; double newScale = activeDoc.Scale + delta; if (newScale < 0.2) newScale = 0.2; if (newScale > 5.0) newScale = 5.0; activeDoc.Scale = newScale; StateHasChanged(); zoomTimer?.Stop(); zoomTimer?.Start(); }
-    private async Task ZoomIn() { if (isRendering || activeDoc == null) return; if (activeDoc.Scale >= 5.0) return; isRendering = true; activeDoc.Scale += 0.2; await RenderAllPages(); isRendering = false; }
-    private async Task ZoomOut() { if (isRendering || activeDoc == null) return; if (activeDoc.Scale > 0.4) { isRendering = true; activeDoc.Scale -= 0.2; await RenderAllPages(); isRendering = false; } }
-    private async Task ResetZoom() { if(activeDoc!=null) { activeDoc.Scale = 1.0; await RenderAllPages(); } }
-    private async Task FitToWidth() { if (activeDoc == null) return; double scale = await JS.InvokeAsync<double>("getFitScale", "width"); activeDoc.Scale = Math.Round(scale, 2) - 0.02; await RenderAllPages(); }
-    private async Task FitToPage() { if (activeDoc == null) return; double scale = await JS.InvokeAsync<double>("getFitScale", "height"); activeDoc.Scale = Math.Round(scale, 2); await RenderAllPages(); }
+    [JSInvokable] public void OnZoomIn() => RequestZoom(0.1);
+    [JSInvokable] public void OnZoomOut() => RequestZoom(-0.1);
+    private void RequestZoom(double delta) { if (activeDoc == null) return;
+        double newScale = activeDoc.Scale + delta; if (newScale < 0.2) newScale = 0.2; if (newScale > 5.0) newScale = 5.0;
+        activeDoc.Scale = newScale; StateHasChanged(); zoomTimer?.Stop(); zoomTimer?.Start(); }
+    private async Task ZoomIn() { if (isRendering || activeDoc == null) return;
+        if (activeDoc.Scale >= 5.0) return; isRendering = true; activeDoc.Scale += 0.2; await RenderAllPages(); isRendering = false;
+    }
+    private async Task ZoomOut() { if (isRendering || activeDoc == null) return;
+        if (activeDoc.Scale > 0.4) { isRendering = true; activeDoc.Scale -= 0.2; await RenderAllPages(); isRendering = false;
+    } }
+    private async Task ResetZoom() { if(activeDoc!=null) { activeDoc.Scale = 1.0; await RenderAllPages();
+    } }
+    private async Task FitToWidth() { if (activeDoc == null) return;
+        double scale = await JS.InvokeAsync<double>("getFitScale", "width"); activeDoc.Scale = Math.Round(scale, 2) - 0.02; await RenderAllPages();
+    }
+    private async Task FitToPage() { if (activeDoc == null) return; double scale = await JS.InvokeAsync<double>("getFitScale", "height");
+        activeDoc.Scale = Math.Round(scale, 2); await RenderAllPages(); }
     
-    private async Task RenderAllPages() { if (activeDoc == null) return; for (int i = 1; i <= activeDoc.TotalPages; i++) await JS.InvokeVoidAsync("renderPageById", i, activeDoc.Scale, $"canvas-{i}", $"page-wrapper-{i}", $"text-layer-{i}"); }
-    private async Task RenderThumbnails() { if (activeTab != "PAGES" || activeDoc == null) return; for (int i = 1; i <= activeDoc.TotalPages; i++) await JS.InvokeVoidAsync("renderThumbnail", i, $"thumb-{i}", thumbnailScale); }
-    private async Task ScrollToPage(int pageNum) { await JS.InvokeVoidAsync("eval", $"document.getElementById('anchor-page-{pageNum}')?.scrollIntoView({{behavior:'auto', block:'start'}})"); }
+    private async Task RenderAllPages() { if (activeDoc == null) return;
+        for (int i = 1; i <= activeDoc.TotalPages; i++) await JS.InvokeVoidAsync("renderPageById", i, activeDoc.Scale, $"canvas-{i}", $"page-wrapper-{i}", $"text-layer-{i}");
+    }
+    private async Task RenderThumbnails() { if (activeTab != "PAGES" || activeDoc == null) return;
+        for (int i = 1; i <= activeDoc.TotalPages; i++) await JS.InvokeVoidAsync("renderThumbnail", i, $"thumb-{i}", thumbnailScale);
+    }
+    private async Task ScrollToPage(int pageNum) { await JS.InvokeVoidAsync("eval", $"document.getElementById('anchor-page-{pageNum}')?.scrollIntoView({{behavior:'auto', block:'start'}})");
+    }
     
-    private void OnColorChanged(ChangeEventArgs e) { currentInputColor = e.Value?.ToString() ?? "#000000"; if(activeDoc?.SelectedAnnotation != null) activeDoc.SelectedAnnotation.Color = currentInputColor; }
-    private void OnSizeChanged(ChangeEventArgs e) { if(int.TryParse(e.Value?.ToString(), out int s)) { currentInputFontSize = s; if(activeDoc?.SelectedAnnotation != null) activeDoc.SelectedAnnotation.FontSize = currentInputFontSize; } }
-    private void ApplyStyles() { if (activeDoc?.SelectedAnnotation != null) { SaveState(); activeDoc.SelectedAnnotation.Color = currentInputColor; activeDoc.SelectedAnnotation.FontSize = currentInputFontSize; } }
+    private void OnColorChanged(ChangeEventArgs e) { currentInputColor = e.Value?.ToString() ?? "#000000";
+        if(activeDoc?.SelectedAnnotation != null) activeDoc.SelectedAnnotation.Color = currentInputColor; }
+    private void OnSizeChanged(ChangeEventArgs e) { if(int.TryParse(e.Value?.ToString(), out int s)) { currentInputFontSize = s;
+        if(activeDoc?.SelectedAnnotation != null) activeDoc.SelectedAnnotation.FontSize = currentInputFontSize; } }
+    private void ApplyStyles() { if (activeDoc?.SelectedAnnotation != null) { SaveState();
+        activeDoc.SelectedAnnotation.Color = currentInputColor; activeDoc.SelectedAnnotation.FontSize = currentInputFontSize; } }
     
-    private void SavePdf() { if (activeDoc == null) return; try { var finalBytes = PdfService.SavePdfWithAnnotations(activeDoc.Data, activeDoc.Annotations, activeDoc.Scale); File.WriteAllBytes(activeDoc.FilePath, finalBytes); activeDoc.Data = finalBytes; JS.InvokeVoidAsync("alert", "저장 완료!"); } catch (Exception ex) { JS.InvokeVoidAsync("alert", "저장 실패: " + ex.Message); } }
-    private void SavePdfAs() { if (activeDoc == null) return; var dlg = new SaveFileDialog { FileName = activeDoc.FileName, DefaultExt = ".pdf", Filter = "PDF documents (.pdf)|*.pdf" }; if (dlg.ShowDialog() == true) { try { var finalBytes = PdfService.SavePdfWithAnnotations(activeDoc.Data, activeDoc.Annotations, activeDoc.Scale); File.WriteAllBytes(dlg.FileName, finalBytes); activeDoc.FilePath = dlg.FileName; activeDoc.FileName = System.IO.Path.GetFileName(dlg.FileName); activeDoc.Data = finalBytes; StateHasChanged(); } catch {} } }
+    private void SavePdf() { if (activeDoc == null) return;
+        try { var finalBytes = PdfService.SavePdfWithAnnotations(activeDoc.Data, activeDoc.Annotations, activeDoc.Scale); File.WriteAllBytes(activeDoc.FilePath, finalBytes); activeDoc.Data = finalBytes; JS.InvokeVoidAsync("alert", "저장 완료!");
+        } catch (Exception ex) { JS.InvokeVoidAsync("alert", "저장 실패: " + ex.Message);
+    } }
+    private void SavePdfAs() { if (activeDoc == null) return;
+        var dlg = new SaveFileDialog { FileName = activeDoc.FileName, DefaultExt = ".pdf", Filter = "PDF documents (.pdf)|*.pdf" };
+        if (dlg.ShowDialog() == true) { try { var finalBytes = PdfService.SavePdfWithAnnotations(activeDoc.Data, activeDoc.Annotations, activeDoc.Scale); File.WriteAllBytes(dlg.FileName, finalBytes); activeDoc.FilePath = dlg.FileName;
+            activeDoc.FileName = System.IO.Path.GetFileName(dlg.FileName); activeDoc.Data = finalBytes; StateHasChanged(); } catch {} } }
     
     [JSInvokable] public void OnDeleteSelected() => DeleteSelected();
-    private void DeleteSelected() { if (activeDoc?.SelectedAnnotation != null) { SaveState(); activeDoc.Annotations.Remove(activeDoc.SelectedAnnotation); activeDoc.SelectedAnnotation = null; } }
-    private void SelectAnnotation(AnnotationData item) { if(activeDoc!=null) activeDoc.SelectedAnnotation = item; }
-    private void StartDragAnnotation(AnnotationData item, MouseEventArgs e) { if(activeDoc!=null) { draggingAnnotation = item; activeDoc.SelectedAnnotation = item; lastMouseX = e.ClientX; lastMouseY = e.ClientY; } }
+    private void DeleteSelected() { if (activeDoc?.SelectedAnnotation != null) { SaveState(); activeDoc.Annotations.Remove(activeDoc.SelectedAnnotation); activeDoc.SelectedAnnotation = null;
+    } }
+    private void SelectAnnotation(AnnotationData item) { if(activeDoc!=null) activeDoc.SelectedAnnotation = item;
+    }
+    private void StartDragAnnotation(AnnotationData item, MouseEventArgs e) { if(activeDoc!=null) { draggingAnnotation = item; activeDoc.SelectedAnnotation = item;
+        lastMouseX = e.ClientX; lastMouseY = e.ClientY; } }
     
-    private async Task OnPageMouseDown(MouseEventArgs e, int pageNum) { if (activeDoc == null) return; if (activeMode == "TEXT") { SaveState(); var newAnn = new AnnotationData { Id=Guid.NewGuid().ToString(), Type="TEXT", Content="", X=e.OffsetX/activeDoc.Scale, Y=e.OffsetY/activeDoc.Scale, Page=pageNum, FontSize=currentInputFontSize, Color=currentInputColor }; activeDoc.Annotations.Add(newAnn); SelectAnnotation(newAnn); activeMode = "INFO"; StateHasChanged(); await JS.InvokeVoidAsync("focusElement", "ann-" + newAnn.Id); } else if (activeMode == "HIGHLIGHT" || activeMode == "SNAPSHOT") { if(activeMode=="HIGHLIGHT") isDrawingHighlight = true; else isSnapshotMode = true; drawingPage = pageNum; drawStartX = e.OffsetX; drawStartY = e.OffsetY; drawCurX = e.OffsetX; drawCurY = e.OffsetY; } }
-    private void OnPageMouseMove(MouseEventArgs e, int pageNum) { if ((isDrawingHighlight || isSnapshotMode) && drawingPage == pageNum) { drawCurX = e.OffsetX; drawCurY = e.OffsetY; } }
-    private void OnGlobalMouseMove(MouseEventArgs e) { if (isSidebarResizing) { if (e.ClientX > 100 && e.ClientX < 500) sidebarWidth = (int)e.ClientX; return; } if (draggingAnnotation != null) { draggingAnnotation.X += (e.ClientX - lastMouseX)/activeDoc.Scale; draggingAnnotation.Y += (e.ClientY - lastMouseY)/activeDoc.Scale; lastMouseX = e.ClientX; lastMouseY = e.ClientY; } }
+    private async Task OnPageMouseDown(MouseEventArgs e, int pageNum) { if (activeDoc == null) return;
+        if (activeMode == "TEXT") { SaveState(); var newAnn = new AnnotationData { Id=Guid.NewGuid().ToString(), Type="TEXT", Content="", X=e.OffsetX/activeDoc.Scale, Y=e.OffsetY/activeDoc.Scale, Page=pageNum, FontSize=currentInputFontSize, Color=currentInputColor };
+            activeDoc.Annotations.Add(newAnn); SelectAnnotation(newAnn); activeMode = "INFO"; StateHasChanged(); await JS.InvokeVoidAsync("focusElement", "ann-" + newAnn.Id);
+        } else if (activeMode == "HIGHLIGHT" || activeMode == "SNAPSHOT") { 
+            // 형광펜 박스 그리기 모드
+            if(activeMode=="HIGHLIGHT") isDrawingHighlight = true; 
+            else isSnapshotMode = true;
+            drawingPage = pageNum; drawStartX = e.OffsetX; drawStartY = e.OffsetY; drawCurX = e.OffsetX; drawCurY = e.OffsetY;
+        } }
+    private void OnPageMouseMove(MouseEventArgs e, int pageNum) { if ((isDrawingHighlight || isSnapshotMode) && drawingPage == pageNum) { drawCurX = e.OffsetX;
+        drawCurY = e.OffsetY; } }
+    private void OnGlobalMouseMove(MouseEventArgs e) { if (isSidebarResizing) { if (e.ClientX > 100 && e.ClientX < 500) sidebarWidth = (int)e.ClientX;
+        return; } if (draggingAnnotation != null) { draggingAnnotation.X += (e.ClientX - lastMouseX)/activeDoc.Scale; draggingAnnotation.Y += (e.ClientY - lastMouseY)/activeDoc.Scale; lastMouseX = e.ClientX;
+        lastMouseY = e.ClientY; } }
     
-    private async Task AddBlankPage(int targetPage = -1) { if (activeDoc == null) return; SaveState(); int idx = targetPage == -1 ? -1 : targetPage; activeDoc.Data = PdfService.AddBlankPage(activeDoc.Data, idx); activeDoc.TotalPages = await JS.InvokeAsync<int>("loadPdfDocument", activeDoc.Data); await RenderAllPages(); await RenderThumbnails(); }
+    private async Task AddBlankPage(int targetPage = -1) { if (activeDoc == null) return;
+        SaveState(); int idx = targetPage == -1 ? -1 : targetPage; activeDoc.Data = PdfService.AddBlankPage(activeDoc.Data, idx); activeDoc.TotalPages = await JS.InvokeAsync<int>("loadPdfDocument", activeDoc.Data);
+        await RenderAllPages(); await RenderThumbnails(); }
     
     private async Task PastePageFromClipboard(int targetPage = -1) { 
-        if (activeDoc == null) return; 
+        if (activeDoc == null) return;
         CloseContextMenu(); 
         byte[]? imgBytes = null; 
         await System.Windows.Application.Current.Dispatcher.InvokeAsync(() => { 
@@ -424,37 +510,56 @@
                     } 
                 } 
             } catch { } 
-        }); 
+        });
         if (imgBytes != null) { 
-            SaveState(); 
+            SaveState();
             int idx = targetPage == -1 ? -1 : targetPage; 
             activeDoc.Data = PdfService.AddImagePage(activeDoc.Data, imgBytes, idx); 
-            activeDoc.TotalPages = await JS.InvokeAsync<int>("loadPdfDocument", activeDoc.Data); 
+            activeDoc.TotalPages = await JS.InvokeAsync<int>("loadPdfDocument", activeDoc.Data);
             await RenderAllPages(); 
             await RenderThumbnails(); 
         } 
     }
     
-    private async Task ConfirmDeletePage() { if (activeDoc == null) return; CloseContextMenu(); bool ok = await JS.InvokeAsync<bool>("confirm", $"{contextMenuTargetPage}페이지 삭제?"); if (ok) await DeletePage(contextMenuTargetPage); }
-    private async Task DeletePage(int pageNum) { if (activeDoc == null) return; SaveState(); activeDoc.Data = PdfService.DeletePage(activeDoc.Data, pageNum - 1); activeDoc.Annotations.RemoveAll(a => a.Page == pageNum); foreach (var ann in activeDoc.Annotations.Where(a => a.Page > pageNum)) ann.Page--; activeDoc.TotalPages = await JS.InvokeAsync<int>("loadPdfDocument", activeDoc.Data); await RenderAllPages(); await RenderThumbnails(); }
+    private async Task ConfirmDeletePage() { if (activeDoc == null) return;
+        CloseContextMenu(); bool ok = await JS.InvokeAsync<bool>("confirm", $"{contextMenuTargetPage}페이지 삭제?"); if (ok) await DeletePage(contextMenuTargetPage);
+    }
+    private async Task DeletePage(int pageNum) { if (activeDoc == null) return; SaveState();
+        activeDoc.Data = PdfService.DeletePage(activeDoc.Data, pageNum - 1); activeDoc.Annotations.RemoveAll(a => a.Page == pageNum);
+        foreach (var ann in activeDoc.Annotations.Where(a => a.Page > pageNum)) ann.Page--; activeDoc.TotalPages = await JS.InvokeAsync<int>("loadPdfDocument", activeDoc.Data); await RenderAllPages(); await RenderThumbnails();
+    }
     
-    [JSInvokable] public async Task OnThumbnailZoomIn() { thumbnailScale += 0.05; await RenderThumbnails(); }
-    [JSInvokable] public async Task OnThumbnailZoomOut() { if(thumbnailScale > 0.1) { thumbnailScale -= 0.05; await RenderThumbnails(); } }
+    [JSInvokable] public async Task OnThumbnailZoomIn() { thumbnailScale += 0.05; await RenderThumbnails();
+    }
+    [JSInvokable] public async Task OnThumbnailZoomOut() { if(thumbnailScale > 0.1) { thumbnailScale -= 0.05; await RenderThumbnails();
+    } }
     
-    private async Task SwitchToPagesTab() { activeTab = "PAGES"; StateHasChanged(); await Task.Delay(50); await RenderThumbnails(); await JS.InvokeVoidAsync("registerSidebarZoomEvent", "sidebar-thumbnails"); }
+    private async Task SwitchToPagesTab() { activeTab = "PAGES"; StateHasChanged(); await Task.Delay(50);
+        await RenderThumbnails(); await JS.InvokeVoidAsync("registerSidebarZoomEvent", "sidebar-thumbnails"); }
     private void StartResizeSidebar(MouseEventArgs e) => isSidebarResizing = true;
     private void ToggleSidebar() => isSidebarOpen = !isSidebarOpen;
     private void SetMode(string mode) => activeMode = mode;
     private void CloseContextMenu() => isContextMenuVisible = false;
-    private void ShowContextMenu(MouseEventArgs e, int pageNum) { isContextMenuVisible = true; contextMenuX = e.ClientX; contextMenuY = e.ClientY; contextMenuTargetPage = pageNum; }
+    private void ShowContextMenu(MouseEventArgs e, int pageNum) { isContextMenuVisible = true; contextMenuX = e.ClientX;
+        contextMenuY = e.ClientY; contextMenuTargetPage = pageNum; }
     
     [JSInvokable] public async Task OnCtrlF() => await ToggleSearchBar();
-    private async Task ToggleSearchBar() { showSearchBar = !showSearchBar; StateHasChanged(); if (showSearchBar) { await Task.Delay(50); await JS.InvokeVoidAsync("focusElement", "searchInput"); } else { await JS.InvokeVoidAsync("clearSearchHighlights"); searchQuery = ""; searchResultCount = 0; } }
-    private void CloseSearchBar() { showSearchBar = false; JS.InvokeVoidAsync("clearSearchHighlights"); }
-    private async Task HandleSearchKeyUp(KeyboardEventArgs e) { if (e.Key == "Enter") { if (e.ShiftKey) await SearchPrev(); else await SearchNext(); } else { await ExecuteSearch(); } }
-    private async Task ExecuteSearch() { if (string.IsNullOrWhiteSpace(searchQuery)) { await JS.InvokeVoidAsync("clearSearchHighlights"); searchResultCount = 0; return; } searchResultCount = await JS.InvokeAsync<int>("performSearch", searchQuery); currentSearchIndex = 0; if (searchResultCount > 0) await JS.InvokeVoidAsync("highlightNextMatch", 0); }
-    private async Task SearchNext() { if (searchResultCount > 0) { currentSearchIndex++; if (currentSearchIndex >= searchResultCount) currentSearchIndex = 0; await JS.InvokeVoidAsync("highlightNextMatch", currentSearchIndex); } }
-    private async Task SearchPrev() { if (searchResultCount > 0) { currentSearchIndex--; if (currentSearchIndex < 0) currentSearchIndex = searchResultCount - 1; await JS.InvokeVoidAsync("highlightNextMatch", currentSearchIndex); } }
+    private async Task ToggleSearchBar() { showSearchBar = !showSearchBar; StateHasChanged(); if (showSearchBar) { await Task.Delay(50); await JS.InvokeVoidAsync("focusElement", "searchInput");
+    } else { await JS.InvokeVoidAsync("clearSearchHighlights"); searchQuery = ""; searchResultCount = 0;
+    } }
+    private void CloseSearchBar() { showSearchBar = false; JS.InvokeVoidAsync("clearSearchHighlights");
+    }
+    private async Task HandleSearchKeyUp(KeyboardEventArgs e) { if (e.Key == "Enter") { if (e.ShiftKey) await SearchPrev();
+        else await SearchNext(); } else { await ExecuteSearch(); } }
+    private async Task ExecuteSearch() { if (string.IsNullOrWhiteSpace(searchQuery)) { await JS.InvokeVoidAsync("clearSearchHighlights");
+        searchResultCount = 0; return; } searchResultCount = await JS.InvokeAsync<int>("performSearch", searchQuery); currentSearchIndex = 0; if (searchResultCount > 0) await JS.InvokeVoidAsync("highlightNextMatch", 0);
+    }
+    private async Task SearchNext() { if (searchResultCount > 0) { currentSearchIndex++;
+        if (currentSearchIndex >= searchResultCount) currentSearchIndex = 0; await JS.InvokeVoidAsync("highlightNextMatch", currentSearchIndex);
+    } }
+    private async Task SearchPrev() { if (searchResultCount > 0) { currentSearchIndex--;
+        if (currentSearchIndex < 0) currentSearchIndex = searchResultCount - 1; await JS.InvokeVoidAsync("highlightNextMatch", currentSearchIndex);
+    } }
     
     public void Dispose() { dotNetRef?.Dispose(); zoomTimer?.Dispose(); }
 }
