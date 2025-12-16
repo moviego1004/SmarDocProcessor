@@ -46,7 +46,7 @@ html, body {
     cursor: pointer; border: none; background: transparent; 
 }
 
-/* [수정] 1300px 이하에서 메뉴 숨기고 더보기 버튼 보이기 (기준 완화) */
+/* 1300px 이하에서 메뉴 숨기고 더보기 버튼 보이기 (기준 완화) */
 @media (max-width: 1300px) {
     .responsive-hide { display: none !important; }
     .more-btn { display: block !important; }
@@ -108,6 +108,47 @@ html, body {
     user-select: text !important;
     -webkit-user-select: text !important;
 }
+
+/* [핵심 수정] 그리기 모드(형광펜, 캡처)일 땐 텍스트 레이어 이벤트를 무시하여 그리기가 되도록 함 */
+.drawing-mode .textLayer {
+    pointer-events: none !important;
+}
+
+.textLayer span { color: transparent; position: absolute; white-space: pre; cursor: text; transform-origin: 0% 0%; }
+.textLayer ::selection { background: rgba(0, 0, 255, 0.3); color: transparent; }
+
+.search-match { background-color: yellow; border-radius: 2px; color: transparent; }
+.search-match.current { background-color: orange; border: 1px solid darkorange; }
+.annotation-container.selected { border: 1px solid #0078d4; z-index: 100; }
+.search-bar { position: absolute; top: 60px; right: 20px; z-index: 2000; background: white; border: 1px solid #ccc; padding: 5px 10px; border-radius: 4px; box-shadow: 0 4px 8px rgba(0,0,0,0.2); display: flex; align-items: center; gap: 5px; }
+.search-bar input { border: 1px solid #ddd; padding: 3px; font-size: 13px; width: 150px; }
+.search-count { font-size: 12px; color: #666; min-width: 50px; text-align: center; }
+.context-menu { position: fixed; background: white; border: 1px solid #ccc; box-shadow: 2px 2px 5px rgba(0,0,0,0.2); z-index: 1000; min-width: 150px; border-radius: 4px; }
+.menu-item { padding: 8px 12px; cursor: pointer; font-size: 13px; }
+.menu-item:hover { background-color: #f0f0f0; }
+.animate-fade-in { animation: fadeIn 0.2s ease-in-out; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
+
+/* 플로팅 툴바 (기존 스타일 - 아래에서 덮어씌워짐) */
+.selection-popup {
+    position: absolute; background: #444; color: white;
+    border-radius: 6px; padding: 6px 10px; display: flex; gap: 8px;
+    z-index: 9999; box-shadow: 0 4px 15px rgba(0,0,0,0.4); align-items: center;
+}
+.selection-popup::after {
+    content: ""; position: absolute; top: 100%; left: 50%; margin-left: -6px;
+    border-width: 6px; border-style: solid; border-color: #444 transparent transparent transparent;
+}
+.popup-btn { cursor: pointer; padding: 4px; border-radius: 4px; display: flex; align-items: center; justify-content: center; color: #eee; font-size: 16px; transition: background 0.2s; }
+.popup-btn:hover { background: #666; color: white; }
+.popup-divider { width: 1px; height: 18px; background: #666; margin: 0 2px; }
+.color-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+
+
+/* ========================================================== */
+/* [핵심 수정 사항] 아래 내용이 추가되어 정상 작동합니다.  */
+/* ========================================================== */
+
 /* [핵심] 그리기 모드일 때는 텍스트 선택 레이어를 숨겨서 캔버스에 바로 그림이 그려지게 함 */
 .drawing-mode .textLayer {
     pointer-events: none !important;
@@ -129,7 +170,6 @@ html, body {
     align-items: center;
 }
 
-
 .popup-btn {
     cursor: pointer;
     padding: 4px 8px;
@@ -141,52 +181,4 @@ html, body {
     justify-content: center;
     color: #eee;
 }
-
 .popup-btn:hover { background: #555; color: white; }
-
-.textLayer span { color: transparent; position: absolute; white-space: pre; cursor: text; transform-origin: 0% 0%; }
-.textLayer ::selection { background: rgba(0, 0, 255, 0.3); color: transparent; }
-
-.search-match { background-color: yellow; border-radius: 2px; color: transparent; }
-.search-match.current { background-color: orange; border: 1px solid darkorange; }
-.annotation-container.selected { border: 1px solid #0078d4; z-index: 100; }
-.search-bar { position: absolute; top: 60px; right: 20px; z-index: 2000; background: white; border: 1px solid #ccc; padding: 5px 10px; border-radius: 4px; box-shadow: 0 4px 8px rgba(0,0,0,0.2); display: flex; align-items: center; gap: 5px; }
-.search-bar input { border: 1px solid #ddd; padding: 3px; font-size: 13px; width: 150px; }
-.search-count { font-size: 12px; color: #666; min-width: 50px; text-align: center; }
-.context-menu { position: fixed; background: white; border: 1px solid #ccc; box-shadow: 2px 2px 5px rgba(0,0,0,0.2); z-index: 1000; min-width: 150px; border-radius: 4px; }
-.menu-item { padding: 8px 12px; cursor: pointer; font-size: 13px; }
-.menu-item:hover { background-color: #f0f0f0; }
-.animate-fade-in { animation: fadeIn 0.2s ease-in-out; }
-@keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
-
-/* 텍스트 선택 시 팝업을 화면 맨 위에 고정 */
-.selection-popup {
-    position: fixed !important; /* absolute -> fixed로 변경하여 스크롤 영향 제거 */
-    z-index: 20000 !important;
-    background: #333;
-    color: white;
-    padding: 6px;
-    border-radius: 4px;
-    display: flex;
-    gap: 8px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-    pointer-events: auto !important;
-}
-.popup-btn {
-    cursor: pointer;
-    padding: 4px 8px;
-    border-radius: 4px;
-    background: transparent;
-    transition: background 0.2s;
-}
-.popup-btn:hover { background: #555; }
-
-.selection-popup::after {
-    content: ""; position: absolute; top: 100%; left: 50%; margin-left: -6px;
-    border-width: 6px; border-style: solid; border-color: #444 transparent transparent transparent;
-}
-.popup-btn { cursor: pointer; padding: 4px; border-radius: 4px; display: flex; align-items: center; justify-content: center; color: #eee; font-size: 16px; transition: background 0.2s; }
-.popup-btn:hover { background: #666; color: white; }
-.popup-divider { width: 1px; height: 18px; background: #666; margin: 0 2px; }
-.color-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
-/* 👇👇 [여기부터 아래 내용을 복사해서 붙여넣으세요!] 👇👇 */
