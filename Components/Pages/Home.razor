@@ -249,12 +249,10 @@
     private void ToggleMoreMenu() { showMoreMenu = !showMoreMenu; }
     private void CloseMenus() { showMoreMenu = false; showSelectionPopup = false; CloseContextMenu(); }
 
-   [JSInvokable] public void OnTextSelected(double conX, double conY, double pgX, double pgY, double w, double h, int pageNum, string text) {
+    [JSInvokable] public void OnTextSelected(double conX, double conY, double pgX, double pgY, double w, double h, int pageNum, string text) {
         if (activeDoc == null) return;
         
         double offsetX = isSidebarOpen ? sidebarWidth : 0;
-        
-        // [수정] 팝업 위치를 선택 영역 '위쪽'으로 (기존 +50 -> -45)
         popupX = conX + offsetX; 
         popupY = conY - 45; 
         

@@ -46,7 +46,7 @@ html, body {
     cursor: pointer; border: none; background: transparent; 
 }
 
-/* [수정] 1100px -> 1300px로 변경 */
+/* [수정] 1300px 이하에서 메뉴 숨기고 더보기 버튼 보이기 (기준 완화) */
 @media (max-width: 1300px) {
     .responsive-hide { display: none !important; }
     .more-btn { display: block !important; }
@@ -109,8 +109,7 @@ html, body {
     -webkit-user-select: text !important;
 }
 
-/* 🚨 [이 부분이 빠져 있습니다! 파일 맨 아래에 꼭 추가해주세요] 🚨 */
-/* 그리기 모드(형광펜, 캡처)일 땐 텍스트 선택 방지 -> 드래그 그리기 가능 */
+/* [핵심 수정] 그리기 모드(형광펜, 캡처)일 땐 텍스트 레이어 이벤트를 무시하여 그리기가 되도록 함 */
 .drawing-mode .textLayer {
     pointer-events: none !important;
 }
