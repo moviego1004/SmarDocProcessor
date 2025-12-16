@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Smart Doc Processor</title>
+    <base href="/" />
+    
+    <link href="css/app.css" rel="stylesheet" />
+    <link href="SmartDocProcessor.styles.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf_viewer.min.css">
+    
+    <style>
+        .input-annotation {
+            background: transparent; border: 1px dashed rgba(0,0,0,0.1); 
+            overflow: hidden; outline: none; 
+            font-family: 'Segoe UI', sans-serif; line-height: 1.2; padding: 4px; display: block;
+            resize: both; min-width: 50px; max-width: 100%;
+            white-space: pre-wrap; word-wrap: break-word;
+            user-select: text !important; cursor: text !important; pointer-events: auto !important;
+        }
+        .input-annotation:focus, .input-annotation:hover { border: 1px dashed #0078d4; background: rgba(255, 255, 255, 0.6); }
+        .drag-handle { height: 15px; background-color: #0078d4; color: white; cursor: move; font-size: 10px; display: flex; align-items: center; justify-content: center; opacity: 0; user-select: none; pointer-events: auto; }
+        .annotation-container:hover .drag-handle { opacity: 1; }
+        .annotation-container.selected .drag-handle { opacity: 1; background-color: #005a9e; }
+        .search-match { background-color: yellow; border-radius: 2px; color: transparent; }
+        .search-match.current { background-color: orange; border: 1px solid darkorange; }
+        .grab { cursor: grab !important; }
+        .grabbing { cursor: grabbing !important; }
+        
+        .selection-popup { position: absolute; background: #333; color: white; padding: 5px; border-radius: 4px; display: flex; gap: 5px; z-index: 10000; box-shadow: 0 2px 5px rgba(0,0,0,0.3); }
+        .popup-btn { cursor: pointer; padding: 2px 6px; font-size: 12px; display: flex; align-items: center; border-radius: 2px; }
+        .popup-btn:hover { background: #555; }
+        .color-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+
+        ::-webkit-scrollbar { width: 14px; }
+        ::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 7px; border: 3px solid #525659; }
+        ::-webkit-scrollbar-track { background: #525659; }
+    </style>
+</head>
+
+<body>
+    <div id="app">
+        <div style="display:flex; justify-content:center; align-items:center; height:100vh; background:#f0f0f0;">
+            <div style="text-align:center;">
+                <h3>Smart Doc Processor</h3>
+                <p>로딩 중입니다...</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="_framework/blazor.webview.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    
+    <script>
+        var pdfjsLib = window['pdfjs-dist/build/pdf'];
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        
+        var pdfState = { pdfDoc: null, dotNetRef: null, observer: null, searchMatches: [], currentMatchIndex: -1, renderTasks: {} };
+
+        window.initPdfViewer = (dotNetRef) => {
+            pdfState.dotNetRef = dotNetRef;
+            const container = document.getElementById('pdf-container');
+            
+            window.addEventListener('wheel', function(e) {
+                if (e.target.closest('.sidebar')) return;
+                if (e.ctrlKey) { 
+                    e.preventDefault(); e.stopPropagation(); 
+                    if (e.deltaY < 0) pdfState.dotNetRef.invokeMethodAsync('OnZoomIn'); 
+                    else pdfState.dotNetRef.invokeMethodAsync('OnZoomOut'); 
+                }
+            }, { passive: false });
+
+            window.addEventListener('keydown', (e) => {
+                if (e.ctrlKey && (e.key === 'f' || e.key === 'F')) { e.preventDefault(); pdfState.dotNetRef.invokeMethodAsync('OnCtrlF'); return; }
+                if (e.key === 'Delete') { if (document.activeElement.tagName !== 'TEXTAREA' && document.activeElement.tagName !== 'INPUT') pdfState.dotNetRef.invokeMethodAsync('OnDeleteSelected'); }
+                if (e.ctrlKey && (e.key === 'z' || e.key === 'Z')) pdfState.dotNetRef.invokeMethodAsync('OnUndo');
+            });
+        };
+
+        window.renderPageById = async (pageNum, scale, canvasId, wrapperId, textLayerId) => {
+            if (!pdfState.pdfDoc) return;
+            var canvas = document.getElementById(canvasId); 
+            var wrapper = document.getElementById(wrapperId); 
+            var textLayerDiv = document.getElementById(textLayerId);
+            
+            if (pdfState.renderTasks[pageNum]) { try { await pdfState.renderTasks[pageNum].cancel(); } catch (e) { } }
+
+            var page = await pdfState.pdfDoc.getPage(pageNum); 
+            var viewport = page.getViewport({ scale: scale });
+
+            canvas.width = viewport.width; canvas.height = viewport.height; 
+            canvas.style.width = `${viewport.width}px`; canvas.style.height = `${viewport.height}px`;
+            if (wrapper) { wrapper.style.width = `${viewport.width}px`; wrapper.style.height = `${viewport.height}px`; }
+
+            var context = canvas.getContext('2d'); 
+            var renderTask = page.render({ canvasContext: context, viewport: viewport }); 
+            pdfState.renderTasks[pageNum] = renderTask;
+
+            try {
+                await renderTask.promise;
+                if (textLayerDiv) {
+                    textLayerDiv.innerHTML = ""; textLayerDiv.style.width = `${viewport.width}px`; textLayerDiv.style.height = `${viewport.height}px`; 
+                    textLayerDiv.style.setProperty('--scale-factor', scale);
+                    var textContent = await page.getTextContent(); 
+                    pdfjsLib.renderTextLayer({ textContentSource: textContent, container: textLayerDiv, viewport: viewport, textDivs: [] });
+                }
+            } catch (err) { } finally { delete pdfState.renderTasks[pageNum]; }
+        };
+
+        window.performSearch = (query) => { try { window.clearSearchHighlights(); pdfState.searchMatches = []; pdfState.currentMatchIndex = -1; if (!query || query.trim() === "") return 0; const textLayers = document.querySelectorAll('.textLayer'); const regex = new RegExp(query, 'gi'); textLayers.forEach((layer) => { if (!layer.dataset.originalHtml) { layer.dataset.originalHtml = layer.innerHTML; } else { layer.innerHTML = layer.dataset.originalHtml; } const spans = layer.querySelectorAll('span'); spans.forEach(span => { const text = span.textContent; if (regex.test(text)) { const newHtml = text.replace(regex, (match) => `<span class="search-match">${match}</span>`); span.innerHTML = newHtml; } }); }); pdfState.searchMatches = document.querySelectorAll('.search-match'); return pdfState.searchMatches.length; } catch (e) { return 0; } };
+        window.highlightNextMatch = (index) => { try { if (pdfState.searchMatches.length === 0) return; if (pdfState.currentMatchIndex >= 0 && pdfState.currentMatchIndex < pdfState.searchMatches.length) { pdfState.searchMatches[pdfState.currentMatchIndex].classList.remove('current'); } if (index >= pdfState.searchMatches.length) index = 0; if (index < 0) index = pdfState.searchMatches.length - 1; pdfState.currentMatchIndex = index; const current = pdfState.searchMatches[index]; if(current) { current.classList.add('current'); current.scrollIntoView({ behavior: 'smooth', block: 'center' }); } } catch (e) { } };
+        window.clearSearchHighlights = () => { try { const textLayers = document.querySelectorAll('.textLayer'); textLayers.forEach(layer => { if (layer.dataset.originalHtml) { layer.innerHTML = layer.dataset.originalHtml; } }); pdfState.searchMatches = []; pdfState.currentMatchIndex = -1; } catch (e) { } };
+        window.loadPdfDocument = async (pdfData) => { var data = new Uint8Array(pdfData); if(pdfState.pdfDoc) pdfState.pdfDoc.destroy(); pdfState.pdfDoc = await pdfjsLib.getDocument({ data: data }).promise; return pdfState.pdfDoc.numPages; };
+        window.renderThumbnail = async (pageNum, canvasId, scale) => { if (!pdfState.pdfDoc) return; var canvas = document.getElementById(canvasId); if(!canvas) return; try { var page = await pdfState.pdfDoc.getPage(pageNum); var viewport = page.getViewport({ scale: scale }); canvas.width = viewport.width; canvas.height = viewport.height; canvas.style.width = `${viewport.width}px`; canvas.style.height = `${viewport.height}px`; var context = canvas.getContext('2d'); await page.render({ canvasContext: context, viewport: viewport }).promise; } catch(e) { } };
+        window.getFitScale = async (type) => { if (!pdfState.pdfDoc) return 1.0; const container = document.getElementById('pdf-container'); const page = await pdfState.pdfDoc.getPage(1); const viewport = page.getViewport({ scale: 1.0 }); const availWidth = container.clientWidth - 40; const availHeight = container.clientHeight - 40; if (type === 'width') return availWidth / viewport.width; else return availHeight / viewport.height; };
+        
+        window.getPageImageBase64 = async (pageNum) => {
+            if (!pdfState.pdfDoc) return null;
+            var page = await pdfState.pdfDoc.getPage(pageNum);
+            var viewport = page.getViewport({ scale: 3.0 }); 
+            var canvas = document.createElement('canvas');
+            canvas.width = viewport.width; canvas.height = viewport.height;
+            var context = canvas.getContext('2d');
+            await page.render({ canvasContext: context, viewport: viewport }).promise;
+            var dataUrl = canvas.toDataURL('image/png');
+            return dataUrl.split(',')[1];
+        };
+
+        window.copySnapshot = async (x, y, w, h, pageNum) => { var canvas = document.getElementById('canvas-' + pageNum); if (!canvas) return; var tempCanvas = document.createElement('canvas'); tempCanvas.width = w; tempCanvas.height = h; var ctx = tempCanvas.getContext('2d'); ctx.drawImage(canvas, x, y, w, h, 0, 0, w, h); try { var blob = await new Promise(resolve => tempCanvas.toBlob(resolve)); await navigator.clipboard.write([ new ClipboardItem({ 'image/png': blob }) ]); } catch (err) { alert("복사 실패"); } };
+        window.registerZoomEvent = (containerId) => { }; 
+        window.setupPageObserver = () => { if (pdfState.observer) pdfState.observer.disconnect(); let options = { root: document.getElementById('pdf-container'), rootMargin: '0px', threshold: 0.5 }; pdfState.observer = new IntersectionObserver((entries) => { entries.forEach(entry => { if (entry.isIntersecting) { let pageNum = parseInt(entry.target.getAttribute('data-page-number')); if(pdfState.dotNetRef) pdfState.dotNetRef.invokeMethodAsync('OnPageVisible', pageNum); } }); }, options); document.querySelectorAll('.page-container').forEach(el => { pdfState.observer.observe(el); }); };
+        window.scrollThumbnailIntoView = (pageNum) => { var el = document.getElementById('thumb-container-' + pageNum); if (el) el.scrollIntoView({ behavior: "smooth", block: "nearest" }); };
+        window.registerSidebarZoomEvent = (elementId) => { var el = document.getElementById(elementId); if (!el) return; el.onwheel = null; el.addEventListener('wheel', (e) => { if (e.ctrlKey) { e.preventDefault(); e.stopPropagation(); if (e.deltaY < 0) pdfState.dotNetRef.invokeMethodAsync('OnThumbnailZoomIn'); else pdfState.dotNetRef.invokeMethodAsync('OnThumbnailZoomOut'); } }, { passive: false }); };
+        window.focusElement = (id) => { setTimeout(() => { var el = document.getElementById(id); if(el) { el.focus(); el.select(); } }, 50); };
+        window.autoResize = (el) => { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; };
+        
+        window.downloadFile = (filename, base64Content) => { var link = document.createElement('a'); link.download = filename; link.href = "data:application/pdf;base64," + base64Content; document.body.appendChild(link); link.click(); document.body.removeChild(link); };
+        
+        // [중요] 텍스트 선택 감지 및 좌표 계산 (화면용 / 페이지용 분리)
+        function handleTextSelection() {
+            var selection = window.getSelection();
+            if (selection && selection.toString().trim().length > 0) {
+                var range = selection.getRangeAt(0);
+                var rect = range.getBoundingClientRect(); // 뷰포트 절대 좌표
+                
+                var container = document.getElementById('pdf-container');
+                var containerRect = container.getBoundingClientRect();
+                
+                var pageEl = selection.anchorNode.parentElement.closest('.page-container');
+                if (pageEl) {
+                    var pageNum = parseInt(pageEl.getAttribute('data-page-number'));
+                    var pageRect = pageEl.getBoundingClientRect();
+
+                    // 1. 팝업 표시용 좌표 (컨테이너 기준 상대 좌표 + 스크롤)
+                    var conX = rect.left - containerRect.left + container.scrollLeft;
+                    var conY = rect.top - containerRect.top + container.scrollTop;
+
+                    // 2. 저장용 데이터 좌표 (페이지 이미지 기준 상대 좌표)
+                    var pgX = rect.left - pageRect.left;
+                    var pgY = rect.top - pageRect.top;
+
+                    if (pageNum > 0 && pdfState.dotNetRef) {
+                        pdfState.dotNetRef.invokeMethodAsync('OnTextSelected', conX, conY, pgX, pgY, rect.width, rect.height, pageNum, selection.toString());
+                    }
+                }
+            } else {
+                if(pdfState.dotNetRef) pdfState.dotNetRef.invokeMethodAsync('OnTextSelectionCleared');
+            }
+        }
+
+        document.addEventListener('mouseup', function(e) {
+            if (e.target.closest('.selection-popup')) return;
+            handleTextSelection();
+        }); 
+
+        // [중요] 우클릭 시에도 팝업 표시 (기본 메뉴 차단)
+        document.addEventListener('contextmenu', function(e) {
+            var selection = window.getSelection();
+            if (selection && selection.toString().trim().length > 0) {
+                e.preventDefault(); 
+                handleTextSelection();
+            }
+        });
+    </script>
+</body>
+</html>
