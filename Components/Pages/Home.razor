@@ -142,7 +142,6 @@
                             <canvas id="canvas-@pageNum"></canvas>
                             <div id="text-layer-@pageNum" class="textLayer"></div>
                             @foreach (var item in activeDoc.Annotations.Where(a => a.Page == pageNum && a.Type != "OCR_TEXT")) { 
-                                // 화면 배율 적용
                                 var scaledX = item.X * activeDoc.Scale;
                                 var scaledY = item.Y * activeDoc.Scale;
                                 var scaledW = item.Width * activeDoc.Scale;
@@ -249,7 +248,6 @@
     private void ToggleMoreMenu() { showMoreMenu = !showMoreMenu; }
     private void CloseMenus() { showMoreMenu = false; showSelectionPopup = false; CloseContextMenu(); }
 
-    // [중요] 좌표 8개 수신 (화면용 / 저장용 분리)
     [JSInvokable] public void OnTextSelected(double conX, double conY, double pgX, double pgY, double w, double h, int pageNum, string text) {
         if (activeDoc == null) return;
         
@@ -374,10 +372,7 @@
     private async Task SwitchTab(PdfDocumentModel doc) { if (activeDoc == doc) return; activeDoc = doc; await JS.InvokeAsync<int>("loadPdfDocument", activeDoc.Data); StateHasChanged(); await Task.Delay(50); await RenderAllPages(); await RenderThumbnails(); await JS.InvokeVoidAsync("setupPageObserver"); await ScrollToPage(activeDoc.CurrentPage); }
     private void CloseTab(PdfDocumentModel doc) { docs.Remove(doc); if (activeDoc == doc) { activeDoc = docs.FirstOrDefault(); if (activeDoc != null) SwitchTab(activeDoc); else StateHasChanged(); } }
     
-    private async Task OnGlobalMouseUp(MouseEventArgs e) { if (isSidebarResizing) isSidebarResizing = false; if (draggingAnnotation != null) { draggingAnnotation = null; SaveState(); } double x = Math.Min(drawStartX, drawCurX); double y = Math.Min(drawStartY, drawCurY); double w = Math.Abs(drawCurX - drawStartX); double h = Math.Abs(drawCurY - drawStartY); if (isDrawingHighlight && activeDoc != null) { if (w > 5 && h > 5) { SaveState(); 
-        // [수정] Unscaled 저장
-        activeDoc.Annotations.Add(new AnnotationData { Type="HIGHLIGHT", X=x/activeDoc.Scale, Y=y/activeDoc.Scale, Width=w/activeDoc.Scale, Height=h/activeDoc.Scale, Page=drawingPage }); 
-        } isDrawingHighlight = false; drawingPage = -1; activeMode="INFO"; } else if (isSnapshotMode && activeDoc != null) { if (w > 5 && h > 5) { await JS.InvokeVoidAsync("copySnapshot", x, y, w, h, drawingPage); await System.Windows.Application.Current.Dispatcher.InvokeAsync(async () => { if (Clipboard.ContainsImage()) { var bitmap = Clipboard.GetImage(); byte[] imgBytes; var pngEncoder = new PngBitmapEncoder(); pngEncoder.Frames.Add(BitmapFrame.Create(bitmap)); using (var ms = new MemoryStream()) { pngEncoder.Save(ms); imgBytes = ms.ToArray(); } string extractedText = await OcrService.ExtractTextFromImage(imgBytes); if (!string.IsNullOrWhiteSpace(extractedText)) { Clipboard.SetText(extractedText); await JS.InvokeVoidAsync("alert", $"[캡처 완료]\n텍스트 복사됨:\n\n{extractedText}"); } else { await JS.InvokeVoidAsync("alert", "OCR: 글자 없음"); } } }); } isSnapshotMode = false; drawingPage = -1; activeMode = "INFO"; } }
+    private async Task OnGlobalMouseUp(MouseEventArgs e) { if (isSidebarResizing) isSidebarResizing = false; if (draggingAnnotation != null) { draggingAnnotation = null; SaveState(); } double x = Math.Min(drawStartX, drawCurX); double y = Math.Min(drawStartY, drawCurY); double w = Math.Abs(drawCurX - drawStartX); double h = Math.Abs(drawCurY - drawStartY); if (isDrawingHighlight && activeDoc != null) { if (w > 5 && h > 5) { SaveState(); activeDoc.Annotations.Add(new AnnotationData { Type="HIGHLIGHT", X=x/activeDoc.Scale, Y=y/activeDoc.Scale, Width=w/activeDoc.Scale, Height=h/activeDoc.Scale, Page=drawingPage }); } isDrawingHighlight = false; drawingPage = -1; activeMode="INFO"; } else if (isSnapshotMode && activeDoc != null) { if (w > 5 && h > 5) { await JS.InvokeVoidAsync("copySnapshot", x, y, w, h, drawingPage); await System.Windows.Application.Current.Dispatcher.InvokeAsync(async () => { if (Clipboard.ContainsImage()) { var bitmap = Clipboard.GetImage(); byte[] imgBytes; var pngEncoder = new PngBitmapEncoder(); pngEncoder.Frames.Add(BitmapFrame.Create(bitmap)); using (var ms = new MemoryStream()) { pngEncoder.Save(ms); imgBytes = ms.ToArray(); } string extractedText = await OcrService.ExtractTextFromImage(imgBytes); if (!string.IsNullOrWhiteSpace(extractedText)) { Clipboard.SetText(extractedText); await JS.InvokeVoidAsync("alert", $"[캡처 완료]\n텍스트 복사됨:\n\n{extractedText}"); } else { await JS.InvokeVoidAsync("alert", "OCR: 글자 없음"); } } }); } isSnapshotMode = false; drawingPage = -1; activeMode = "INFO"; } }
     
     [JSInvokable] public async Task OnPageVisible(int pageNum) { if (activeDoc != null && activeDoc.CurrentPage != pageNum) { activeDoc.CurrentPage = pageNum; HistoryService.SaveLastPage(activeDoc.FilePath, pageNum); StateHasChanged(); if (activeTab == "PAGES") await JS.InvokeVoidAsync("scrollThumbnailIntoView", pageNum); } }
     

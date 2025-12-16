@@ -138,7 +138,7 @@
         
         window.downloadFile = (filename, base64Content) => { var link = document.createElement('a'); link.download = filename; link.href = "data:application/pdf;base64," + base64Content; document.body.appendChild(link); link.click(); document.body.removeChild(link); };
         
-        // [중요] 텍스트 선택 감지 및 좌표 계산 (화면용 / 페이지용 분리)
+        // [중요 수정] C# OnTextSelected(8개 인자)에 맞춰 호출하도록 수정
         function handleTextSelection() {
             var selection = window.getSelection();
             if (selection && selection.toString().trim().length > 0) {
@@ -162,6 +162,7 @@
                     var pgY = rect.top - pageRect.top;
 
                     if (pageNum > 0 && pdfState.dotNetRef) {
+                        // [핵심] 인자 8개 순서대로 전달: conX, conY, pgX, pgY, w, h, pageNum, text
                         pdfState.dotNetRef.invokeMethodAsync('OnTextSelected', conX, conY, pgX, pgY, rect.width, rect.height, pageNum, selection.toString());
                     }
                 }
@@ -175,7 +176,7 @@
             handleTextSelection();
         }); 
 
-        // [중요] 우클릭 시에도 팝업 표시 (기본 메뉴 차단)
+        // [중요] 우클릭 시에도 팝업 표시
         document.addEventListener('contextmenu', function(e) {
             var selection = window.getSelection();
             if (selection && selection.toString().trim().length > 0) {
