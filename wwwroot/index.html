@@ -29,14 +29,7 @@
         .grab { cursor: grab !important; }
         .grabbing { cursor: grabbing !important; }
         
-        .selection-popup { 
-            position: absolute; background: #333; color: white; padding: 5px; 
-            border-radius: 4px; display: flex; gap: 5px; z-index: 10000; 
-            box-shadow: 0 4px 15px rgba(0,0,0,0.5); pointer-events: auto !important; 
-        }
-        .popup-btn { cursor: pointer; padding: 4px 8px; font-size: 14px; display: flex; align-items: center; border-radius: 2px; background: transparent; border: none; color: white; }
-        .popup-btn:hover { background: #555; }
-        .popup-divider { width: 1px; background: #666; margin: 0 2px; }
+        /* 팝업 스타일은 app.css로 이동됨 */
 
         ::-webkit-scrollbar { width: 14px; }
         ::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 7px; border: 3px solid #525659; }
@@ -84,7 +77,6 @@
 
             // [수정] 텍스트 선택 감지 (모드 분리로 인해 충돌 없음)
             document.addEventListener('selectionchange', () => {
-                // 선택 영역이 없으면 팝업 닫기 요청
                 var selection = window.getSelection();
                 if (!selection || selection.rangeCount === 0 || selection.toString().trim().length === 0) {
                    if(pdfState.dotNetRef) pdfState.dotNetRef.invokeMethodAsync('OnTextSelectionCleared');
@@ -133,6 +125,40 @@
             } catch (err) { } finally { delete pdfState.renderTasks[pageNum]; }
         };
 
+        // [수정] 좌표 계산 로직 단순화 (화면 기준 고정 좌표 사용)
+        function handleTextSelection(mouseX, mouseY) {
+            if (!pdfState.dotNetRef) return;
+            var selection = window.getSelection();
+            
+            if (selection && selection.toString().trim().length > 0) {
+                try {
+                    // 선택된 텍스트가 어느 페이지에 있는지 확인
+                    var anchorNode = selection.anchorNode;
+                    if (anchorNode.nodeType === 3) anchorNode = anchorNode.parentNode;
+                    var pageEl = anchorNode.closest('.page-container');
+                    
+                    if (pageEl) {
+                        var pageNum = parseInt(pageEl.getAttribute('data-page-number'));
+                        
+                        // 하이라이트 저장을 위한 PDF 내부 상대 좌표 계산
+                        var range = selection.getRangeAt(0);
+                        var rect = range.getBoundingClientRect();
+                        var container = document.getElementById('pdf-container');
+                        var containerRect = container.getBoundingClientRect();
+                        
+                        var relativeX = rect.left - containerRect.left + container.scrollLeft;
+                        var relativeY = rect.top - containerRect.top + container.scrollTop;
+
+                        // C#으로 전송 (화면 좌표 mouseX/Y는 팝업 위치용, relativeX/Y는 저장용)
+                        var popupX = mouseX || rect.right;
+                        var popupY = mouseY || rect.top;
+
+                        pdfState.dotNetRef.invokeMethodAsync('OnTextSelected', popupX, popupY, relativeX, relativeY, rect.width, rect.height, pageNum, selection.toString());
+                    }
+                } catch (e) { console.error(e); }
+            }
+        }
+        
         window.performSearch = (query) => { try { window.clearSearchHighlights(); pdfState.searchMatches = []; pdfState.currentMatchIndex = -1; if (!query || query.trim() === "") return 0; const textLayers = document.querySelectorAll('.textLayer'); const regex = new RegExp(query, 'gi'); textLayers.forEach((layer) => { if (!layer.dataset.originalHtml) { layer.dataset.originalHtml = layer.innerHTML; } else { layer.innerHTML = layer.dataset.originalHtml; } const spans = layer.querySelectorAll('span'); spans.forEach(span => { const text = span.textContent; if (regex.test(text)) { const newHtml = text.replace(regex, (match) => `<span class="search-match">${match}</span>`); span.innerHTML = newHtml; } }); }); pdfState.searchMatches = document.querySelectorAll('.search-match'); return pdfState.searchMatches.length; } catch (e) { return 0; } };
         window.highlightNextMatch = (index) => { try { if (pdfState.searchMatches.length === 0) return; if (pdfState.currentMatchIndex >= 0 && pdfState.currentMatchIndex < pdfState.searchMatches.length) { pdfState.searchMatches[pdfState.currentMatchIndex].classList.remove('current'); } if (index >= pdfState.searchMatches.length) index = 0; if (index < 0) index = pdfState.searchMatches.length - 1; pdfState.currentMatchIndex = index; const current = pdfState.searchMatches[index]; if(current) { current.classList.add('current'); current.scrollIntoView({ behavior: 'smooth', block: 'center' }); } } catch (e) { } };
         window.clearSearchHighlights = () => { try { const textLayers = document.querySelectorAll('.textLayer'); textLayers.forEach(layer => { if (layer.dataset.originalHtml) { layer.innerHTML = layer.dataset.originalHtml; } }); pdfState.searchMatches = []; pdfState.currentMatchIndex = -1; } catch (e) { } };
@@ -161,41 +187,6 @@
         window.autoResize = (el) => { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; };
         
         window.downloadFile = (filename, base64Content) => { var link = document.createElement('a'); link.download = filename; link.href = "data:application/pdf;base64," + base64Content; document.body.appendChild(link); link.click(); document.body.removeChild(link); };
-        
-        // [수정] 좌표 계산 로직 단순화 (화면 기준 고정 좌표 사용)
-        function handleTextSelection(mouseX, mouseY) {
-            if (!pdfState.dotNetRef) return;
-            var selection = window.getSelection();
-            
-            if (selection && selection.toString().trim().length > 0) {
-                try {
-                    // 선택된 텍스트가 어느 페이지에 있는지 확인
-                    var anchorNode = selection.anchorNode;
-                    if (anchorNode.nodeType === 3) anchorNode = anchorNode.parentNode;
-                    var pageEl = anchorNode.closest('.page-container');
-                    
-                    if (pageEl) {
-                        var pageNum = parseInt(pageEl.getAttribute('data-page-number'));
-                        
-                        // 하이라이트 저장을 위한 PDF 내부 상대 좌표 계산
-                        var range = selection.getRangeAt(0);
-                        var rect = range.getBoundingClientRect();
-                        var container = document.getElementById('pdf-container');
-                        var containerRect = container.getBoundingClientRect();
-                        
-                        var relativeX = rect.left - containerRect.left + container.scrollLeft;
-                        var relativeY = rect.top - containerRect.top + container.scrollTop;
-
-                        // C#으로 전송 (화면 좌표 mouseX/Y는 팝업 위치용, relativeX/Y는 저장용)
-                        // 만약 mouseX가 없으면(키보드 선택 등) rect 기준 사용
-                        var popupX = mouseX || rect.right;
-                        var popupY = mouseY || rect.top;
-
-                        pdfState.dotNetRef.invokeMethodAsync('OnTextSelected', popupX, popupY, relativeX, relativeY, rect.width, rect.height, pageNum, selection.toString());
-                    }
-                } catch (e) { console.error(e); }
-            }
-        }
     </script>
 </body>
 </html>

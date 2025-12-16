@@ -38,8 +38,6 @@
             
             <button class="icon-btn" @onclick="GenerateSearchablePdf" disabled="@(activeDoc == null || isOcrProcessing)" title="전체 페이지를 스캔하여 검색 가능하게 만듭니다.">👁️ <span class="btn-label">OCR(전체)</span></button>
             
-            <button class="icon-btn @(activeMode == "INFO" ? "active" : "")" @onclick='() => SetMode("INFO")' disabled="@(activeDoc == null)" title="텍스트 선택 및 팝업 메뉴">👆 <span class="btn-label">선택(읽기)</span></button>
-            <div class="divider"></div>
             <button class="icon-btn @(activeMode == "SNAPSHOT" ? "active" : "")" @onclick='() => SetMode("SNAPSHOT")' disabled="@(activeDoc == null)">📷 <span class="btn-label">캡처</span></button>
             <button class="icon-btn @(activeMode == "TEXT" ? "active" : "")" @onclick='() => SetMode("TEXT")' disabled="@(activeDoc == null)">T <span class="btn-label">텍스트</span></button>
             <button class="icon-btn @(activeMode == "HIGHLIGHT" ? "active" : "")" @onclick='() => SetMode("HIGHLIGHT")' disabled="@(activeDoc == null)">🖍️ <span class="btn-label">형광펜(박스)</span></button>
@@ -112,10 +110,10 @@
                         <p><strong>페이지:</strong> @activeDoc.TotalPages</p>
                         <hr />
                         <div class="alert alert-light small border">
-                            <strong>모드 안내:</strong><br/>
-                            👆 <strong>선택(읽기):</strong> 텍스트 선택, 팝업 메뉴<br/>
-                            🖍️ <strong>형광펜/캡처:</strong> 드래그하여 박스 그리기<br/>
-                            <span class="text-danger small">(형광펜 모드에선 텍스트 선택 안됨)</span>
+                            <strong>가이드:</strong><br/>
+                            👁️ <strong>OCR:</strong> 검색 가능한 PDF 변환<br/>
+                            🖱️ <strong>선택:</strong> 텍스트 드래그 -> 팝업 메뉴<br/>
+                            🖍️ <strong>형광펜:</strong> 드래그하여 박스 그리기<br/>
                         </div>
                     }
                 </div>
@@ -137,7 +135,7 @@
         </div>
         <div class="splitter" @onmousedown="StartResizeSidebar"><div class="splitter-toggle-btn" @onmousedown:stopPropagation="true" @onclick="ToggleSidebar">◀</div></div>
 
-        <div id="pdf-container" class="@(IsEditMode ? "editing-mode" : "reading-mode")">
+        <div id="pdf-container" class="@(activeMode == "HIGHLIGHT" || activeMode == "SNAPSHOT" ? "drawing-mode" : "")">
             @if (activeDoc != null) {
                 @for (int i = 1; i <= activeDoc.TotalPages; i++) {
                     int pageNum = i;
@@ -212,9 +210,6 @@
     private List<PdfDocumentModel> docs = new List<PdfDocumentModel>();
     private PdfDocumentModel? activeDoc = null;
     private string activeMode = "INFO";
-    // [추가] 편집 모드 여부 확인 속성
-    private bool IsEditMode => activeMode == "HIGHLIGHT" || activeMode == "SNAPSHOT" || activeMode == "TEXT";
-
     private string activeTab = "PROP";
     private string currentInputColor = "#000000";
     private int currentInputFontSize = 16;
@@ -255,7 +250,7 @@
     }
 
     private void ToggleMoreMenu() { showMoreMenu = !showMoreMenu; }
-    private void CloseMenus() { showMoreMenu = false; showSelectionPopup = false; CloseContextMenu(); }
+    private void CloseMenus() { showMoreMenu = false; CloseContextMenu(); }
 
     // [수정] JS에서 받은 화면 좌표(fixed)를 그대로 사용하여 팝업 표시
     [JSInvokable] 
@@ -401,11 +396,12 @@
         double w = Math.Abs(drawCurX - drawStartX); double h = Math.Abs(drawCurY - drawStartY);
         
         if (isDrawingHighlight && activeDoc != null) { 
+            // 너무 작은 드래그는 무시 (클릭 실수 방지)
             if (w > 5 && h > 5) { 
                 SaveState();
                 activeDoc.Annotations.Add(new AnnotationData { Type="HIGHLIGHT", X=x/activeDoc.Scale, Y=y/activeDoc.Scale, Width=w/activeDoc.Scale, Height=h/activeDoc.Scale, Page=drawingPage }); 
             } 
-            isDrawingHighlight = false; drawingPage = -1; activeMode="INFO"; // 그리기 후 자동 선택 모드 복귀
+            isDrawingHighlight = false; drawingPage = -1; activeMode="INFO";
         } else if (isSnapshotMode && activeDoc != null) { 
             if (w > 5 && h > 5) { 
                 await JS.InvokeVoidAsync("copySnapshot", x, y, w, h, drawingPage);
@@ -483,6 +479,7 @@
         if (activeMode == "TEXT") { SaveState(); var newAnn = new AnnotationData { Id=Guid.NewGuid().ToString(), Type="TEXT", Content="", X=e.OffsetX/activeDoc.Scale, Y=e.OffsetY/activeDoc.Scale, Page=pageNum, FontSize=currentInputFontSize, Color=currentInputColor };
             activeDoc.Annotations.Add(newAnn); SelectAnnotation(newAnn); activeMode = "INFO"; StateHasChanged(); await JS.InvokeVoidAsync("focusElement", "ann-" + newAnn.Id);
         } else if (activeMode == "HIGHLIGHT" || activeMode == "SNAPSHOT") { 
+            // 형광펜 박스 그리기 모드
             if(activeMode=="HIGHLIGHT") isDrawingHighlight = true; 
             else isSnapshotMode = true;
             drawingPage = pageNum; drawStartX = e.OffsetX; drawStartY = e.OffsetY; drawCurX = e.OffsetX; drawCurY = e.OffsetY;
