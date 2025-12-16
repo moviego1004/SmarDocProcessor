@@ -29,12 +29,10 @@
         .grab { cursor: grab !important; }
         .grabbing { cursor: grabbing !important; }
         
-        /* 팝업 스타일 강화 */
         .selection-popup { 
             position: absolute; background: #333; color: white; padding: 5px; 
             border-radius: 4px; display: flex; gap: 5px; z-index: 10000; 
-            box-shadow: 0 4px 15px rgba(0,0,0,0.5); 
-            pointer-events: auto !important; /* 클릭 가능하도록 강제 */
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5); pointer-events: auto !important; 
         }
         .popup-btn { cursor: pointer; padding: 4px 8px; font-size: 14px; display: flex; align-items: center; border-radius: 2px; background: transparent; border: none; color: white; }
         .popup-btn:hover { background: #555; }
@@ -84,23 +82,17 @@
                 if (e.ctrlKey && (e.key === 'z' || e.key === 'Z')) pdfState.dotNetRef.invokeMethodAsync('OnUndo');
             });
 
-            // [핵심 수정] 텍스트 선택 감지 로직 강화
-            // selectionchange 이벤트와 debounce를 사용하여 안정적으로 선택 감지
+            // [핵심] 텍스트 선택 감지 강화 (Debounce 적용)
             document.addEventListener('selectionchange', () => {
                 if (selectionTimeout) clearTimeout(selectionTimeout);
                 selectionTimeout = setTimeout(() => {
                     handleTextSelection();
-                }, 300); // 300ms 딜레이 (드래그 완료 대기)
+                }, 300);
             });
 
-            // 마우스를 뗐을 때도 즉시 확인 (빠른 반응성)
             document.addEventListener('mouseup', (e) => {
-                // 팝업 내부 클릭은 무시
                 if (e.target.closest('.selection-popup')) return;
-                
-                setTimeout(() => {
-                    handleTextSelection();
-                }, 50);
+                setTimeout(handleTextSelection, 50);
             });
         };
 
@@ -130,7 +122,6 @@
                     textLayerDiv.style.width = `${viewport.width}px`; 
                     textLayerDiv.style.height = `${viewport.height}px`; 
                     textLayerDiv.style.setProperty('--scale-factor', scale);
-                    
                     var textContent = await page.getTextContent(); 
                     pdfjsLib.renderTextLayer({ textContentSource: textContent, container: textLayerDiv, viewport: viewport, textDivs: [] });
                 }
@@ -166,42 +157,30 @@
         
         window.downloadFile = (filename, base64Content) => { var link = document.createElement('a'); link.download = filename; link.href = "data:application/pdf;base64," + base64Content; document.body.appendChild(link); link.click(); document.body.removeChild(link); };
         
-        // [중요 수정] 선택 감지 로직 함수화 및 안전장치 추가
         function handleTextSelection() {
             if (!pdfState.dotNetRef) return;
-
             var selection = window.getSelection();
-            
-            // 선택된 텍스트가 있는지 확인 (공백만 있는 경우 제외)
-            if (selection && selection.rangeCount > 0 && selection.toString().trim().length > 0) {
+            if (selection && selection.toString().trim().length > 0) {
                 try {
                     var range = selection.getRangeAt(0);
                     var rect = range.getBoundingClientRect();
-                    
                     var container = document.getElementById('pdf-container');
                     var containerRect = container.getBoundingClientRect();
                     
-                    // 선택된 노드가 속한 페이지 찾기 (더 안전한 탐색)
                     var anchorNode = selection.anchorNode;
-                    if (anchorNode.nodeType === 3) anchorNode = anchorNode.parentNode; // 텍스트 노드면 부모 요소로
-                    
+                    if (anchorNode.nodeType === 3) anchorNode = anchorNode.parentNode;
                     var pageEl = anchorNode.closest('.page-container');
                     
                     if (pageEl) {
                         var pageNum = parseInt(pageEl.getAttribute('data-page-number'));
                         if (pageNum > 0) {
                             var x = rect.left - containerRect.left + container.scrollLeft;
-                            var y = rect.top - containerRect.top + container.scrollTop; // 오프셋 조정
-                            
-                            // C#으로 좌표와 텍스트 전송
+                            var y = rect.top - containerRect.top + container.scrollTop;
                             pdfState.dotNetRef.invokeMethodAsync('OnTextSelected', x, y, rect.width, rect.height, pageNum, selection.toString());
                         }
                     }
-                } catch (e) {
-                    console.error("Selection error:", e);
-                }
+                } catch (e) { }
             } else {
-                // 선택 해제 시 팝업 닫기
                 pdfState.dotNetRef.invokeMethodAsync('OnTextSelectionCleared');
             }
         }

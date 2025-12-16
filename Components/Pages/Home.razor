@@ -111,7 +111,7 @@
                         <hr />
                         <div class="alert alert-light small border">
                             <strong>가이드:</strong><br/>
-                            👁️ <strong>OCR:</strong> 검색 가능한 PDF 변환<br/>
+                            👁️ <strong>OCR:</strong> 전체 검색 가능한 PDF 변환<br/>
                             🖱️ <strong>선택:</strong> 텍스트 드래그 -> 팝업 메뉴<br/>
                             🖍️ <strong>형광펜:</strong> 드래그하여 박스 그리기<br/>
                         </div>
@@ -135,7 +135,7 @@
         </div>
         <div class="splitter" @onmousedown="StartResizeSidebar"><div class="splitter-toggle-btn" @onmousedown:stopPropagation="true" @onclick="ToggleSidebar">◀</div></div>
 
-        <div id="pdf-container" class="@(activeMode == "SNAPSHOT" ? "drawing-mode" : "")">
+        <div id="pdf-container" class="@(activeMode == "HIGHLIGHT" || activeMode == "SNAPSHOT" ? "drawing-mode" : "")">
             @if (activeDoc != null) {
                 @for (int i = 1; i <= activeDoc.TotalPages; i++) {
                     int pageNum = i;
@@ -250,19 +250,18 @@
     }
 
     private void ToggleMoreMenu() { showMoreMenu = !showMoreMenu; }
-    private void CloseMenus() { showMoreMenu = false; CloseContextMenu(); } // 팝업 닫기는 JS에서 처리하도록 위임하거나 별도 처리
+    private void CloseMenus() { showMoreMenu = false; CloseContextMenu(); }
 
+    // [중요 수정] 사이드바 오프셋 제거 (팝업은 이미 컨테이너 내부에 있으므로)
     [JSInvokable] public void OnTextSelected(double conX, double conY, double pgX, double pgY, double w, double h, int pageNum, string text) {
         if (activeDoc == null) return;
         
-        // 사이드바 너비 보정
-        double offsetX = isSidebarOpen ? sidebarWidth : 0;
+        // 팝업 X 위치: JS에서 전달받은 conX를 그대로 사용 (이미 컨테이너 내부 좌표임)
+        popupX = conX; 
         
-        popupX = conX + offsetX; 
-        // 팝업이 너무 위로 가면 아래로 표시
-        if (popupY < 0) popupY = 10;
-        
+        // 팝업 Y 위치 보정
         popupY = conY - 45;
+        if (popupY < 0) popupY = 5;
         
         selX = pgX / activeDoc.Scale; 
         selY = pgY / activeDoc.Scale; 
@@ -396,7 +395,6 @@
         double w = Math.Abs(drawCurX - drawStartX); double h = Math.Abs(drawCurY - drawStartY);
         
         if (isDrawingHighlight && activeDoc != null) { 
-            // 너무 작은 드래그는 무시 (클릭 실수 방지)
             if (w > 5 && h > 5) { 
                 SaveState();
                 activeDoc.Annotations.Add(new AnnotationData { Type="HIGHLIGHT", X=x/activeDoc.Scale, Y=y/activeDoc.Scale, Width=w/activeDoc.Scale, Height=h/activeDoc.Scale, Page=drawingPage }); 
@@ -479,7 +477,6 @@
         if (activeMode == "TEXT") { SaveState(); var newAnn = new AnnotationData { Id=Guid.NewGuid().ToString(), Type="TEXT", Content="", X=e.OffsetX/activeDoc.Scale, Y=e.OffsetY/activeDoc.Scale, Page=pageNum, FontSize=currentInputFontSize, Color=currentInputColor };
             activeDoc.Annotations.Add(newAnn); SelectAnnotation(newAnn); activeMode = "INFO"; StateHasChanged(); await JS.InvokeVoidAsync("focusElement", "ann-" + newAnn.Id);
         } else if (activeMode == "HIGHLIGHT" || activeMode == "SNAPSHOT") { 
-            // 형광펜 박스 그리기 모드
             if(activeMode=="HIGHLIGHT") isDrawingHighlight = true; 
             else isSnapshotMode = true;
             drawingPage = pageNum; drawStartX = e.OffsetX; drawStartY = e.OffsetY; drawCurX = e.OffsetX; drawCurY = e.OffsetY;
