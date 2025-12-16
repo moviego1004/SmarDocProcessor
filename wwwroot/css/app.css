@@ -46,7 +46,8 @@ html, body {
     cursor: pointer; border: none; background: transparent; 
 }
 
-@media (max-width: 1100px) {
+/* [수정] 1300px 이하에서 메뉴 숨기고 더보기 버튼 보이기 (기준 완화) */
+@media (max-width: 1300px) {
     .responsive-hide { display: none !important; }
     .more-btn { display: block !important; }
 }
@@ -96,11 +97,23 @@ html, body {
 
 .page-wrapper canvas { position: absolute; left: 0; top: 0; z-index: 1; }
 
+/* [중요] 텍스트 레이어 */
 .textLayer { 
     position: absolute; left: 0; top: 0; right: 0; bottom: 0;
-    z-index: 5; overflow: hidden; line-height: 1.0; opacity: 1;
-    pointer-events: auto; user-select: text !important; -webkit-user-select: text !important;
+    z-index: 5; /* 캔버스 위 */
+    overflow: hidden;
+    line-height: 1.0;
+    opacity: 1;
+    pointer-events: auto;
+    user-select: text !important;
+    -webkit-user-select: text !important;
 }
+
+/* [핵심 수정] 그리기 모드(형광펜, 캡처)일 땐 텍스트 레이어 이벤트를 무시하여 그리기가 되도록 함 */
+.drawing-mode .textLayer {
+    pointer-events: none !important;
+}
+
 .textLayer span { color: transparent; position: absolute; white-space: pre; cursor: text; transform-origin: 0% 0%; }
 .textLayer ::selection { background: rgba(0, 0, 255, 0.3); color: transparent; }
 
@@ -116,53 +129,17 @@ html, body {
 .animate-fade-in { animation: fadeIn 0.2s ease-in-out; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
 
-/* [수정] 플로팅 툴바 스타일 (캡처 이미지와 유사하게) */
+/* 플로팅 툴바 */
 .selection-popup {
-    position: absolute;
-    background: #444; /* 다크 그레이 배경 */
-    color: white;
-    border-radius: 6px;
-    padding: 6px 10px;
-    display: flex;
-    gap: 8px;
-    z-index: 9999;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.4);
-    align-items: center;
+    position: absolute; background: #444; color: white;
+    border-radius: 6px; padding: 6px 10px; display: flex; gap: 8px;
+    z-index: 9999; box-shadow: 0 4px 15px rgba(0,0,0,0.4); align-items: center;
 }
-
-/* 툴바 아래쪽 화살표 */
 .selection-popup::after {
-    content: "";
-    position: absolute;
-    top: 100%;
-    left: 50%;
-    margin-left: -6px;
-    border-width: 6px;
-    border-style: solid;
-    border-color: #444 transparent transparent transparent;
+    content: ""; position: absolute; top: 100%; left: 50%; margin-left: -6px;
+    border-width: 6px; border-style: solid; border-color: #444 transparent transparent transparent;
 }
-
-/* 툴바 아이콘 버튼 */
-.popup-btn {
-    cursor: pointer;
-    padding: 4px;
-    border-radius: 4px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #eee;
-    font-size: 16px; /* 아이콘 크기 */
-    transition: background 0.2s;
-}
-
-.popup-btn:hover {
-    background: #666;
-    color: white;
-}
-
-.popup-divider {
-    width: 1px;
-    height: 18px;
-    background: #666;
-    margin: 0 2px;
-}
+.popup-btn { cursor: pointer; padding: 4px; border-radius: 4px; display: flex; align-items: center; justify-content: center; color: #eee; font-size: 16px; transition: background 0.2s; }
+.popup-btn:hover { background: #666; color: white; }
+.popup-divider { width: 1px; height: 18px; background: #666; margin: 0 2px; }
+.color-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
