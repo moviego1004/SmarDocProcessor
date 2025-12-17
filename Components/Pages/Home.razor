@@ -68,7 +68,6 @@
 
     @if (showMoreMenu) {
         <div class="overflow-menu" @onclick:stopPropagation="true" style="position: fixed; top: 50px; right: 10px; z-index: 2000;">
-            
             <div class="overflow-section-label">도구</div>
             <div class="overflow-grid">
                 <button class="icon-btn @(showSearchBar ? "active" : "")" @onclick='() => { ToggleSearchBar(); CloseMenus(); }' disabled="@(activeDoc == null)">🔍 검색</button>
@@ -392,13 +391,15 @@
                 activeDoc.Annotations.Add(new AnnotationData { Type="HIGHLIGHT", X=x/activeDoc.Scale, Y=y/activeDoc.Scale, Width=w/activeDoc.Scale, Height=h/activeDoc.Scale, Page=drawingPage }); 
             } 
             isDrawingHighlight = false; drawingPage = -1; 
-            await InvokeAsync(() => { SetMode("INFO"); StateHasChanged(); }); 
+            // [수정] activeMode="INFO" 제거하여 형광펜 모드 유지 (토글 방식 지원)
+            StateHasChanged();
         } else if (isSnapshotMode && activeDoc != null) { 
             if (w > 5 && h > 5) { 
                 await JS.InvokeVoidAsync("copySnapshot", x, y, w, h, drawingPage);
                 await System.Windows.Application.Current.Dispatcher.InvokeAsync(async () => { if (Clipboard.ContainsImage()) { var bitmap = Clipboard.GetImage(); byte[] imgBytes; var pngEncoder = new PngBitmapEncoder(); pngEncoder.Frames.Add(BitmapFrame.Create(bitmap)); using (var ms = new MemoryStream()) { pngEncoder.Save(ms); imgBytes = ms.ToArray(); } string extractedText = await OcrService.ExtractTextFromImage(imgBytes); if (!string.IsNullOrWhiteSpace(extractedText)) { Clipboard.SetText(extractedText); await JS.InvokeVoidAsync("alert", $"[캡처 완료]\n텍스트 복사됨:\n\n{extractedText}"); } else { await JS.InvokeVoidAsync("alert", "OCR: 글자 없음"); } } });
             } 
             isSnapshotMode = false; drawingPage = -1;
+            // 캡처는 보통 1회성이므로 풀리는게 낫지만, 원하시면 여기도 activeMode="INFO" 제거 가능
             await InvokeAsync(() => { SetMode("INFO"); StateHasChanged(); });
         } 
     }
@@ -488,7 +489,11 @@
     private async Task SwitchToPagesTab() { activeTab = "PAGES"; StateHasChanged(); await Task.Delay(50); await RenderThumbnails(); await JS.InvokeVoidAsync("registerSidebarZoomEvent", "sidebar-thumbnails"); }
     private void StartResizeSidebar(MouseEventArgs e) => isSidebarResizing = true;
     private void ToggleSidebar() => isSidebarOpen = !isSidebarOpen;
-    private void SetMode(string mode) => activeMode = mode;
+    // [수정] 모드 토글 로직: 이미 선택된 모드면 INFO로 복귀
+    private void SetMode(string mode) {
+        if (activeMode == mode) activeMode = "INFO";
+        else activeMode = mode;
+    }
     private void CloseContextMenu() => isContextMenuVisible = false;
     private void ShowContextMenu(MouseEventArgs e, int pageNum) { isContextMenuVisible = true; contextMenuX = e.ClientX; contextMenuY = e.ClientY; contextMenuTargetPage = pageNum; }
     
