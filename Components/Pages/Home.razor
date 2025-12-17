@@ -391,7 +391,7 @@
                 activeDoc.Annotations.Add(new AnnotationData { Type="HIGHLIGHT", X=x/activeDoc.Scale, Y=y/activeDoc.Scale, Width=w/activeDoc.Scale, Height=h/activeDoc.Scale, Page=drawingPage }); 
             } 
             isDrawingHighlight = false; drawingPage = -1; 
-            // [수정] activeMode="INFO" 제거하여 형광펜 모드 유지 (토글 방식 지원)
+            // [수정] 토글 유지: activeMode="INFO"로 강제 전환하지 않음
             StateHasChanged();
         } else if (isSnapshotMode && activeDoc != null) { 
             if (w > 5 && h > 5) { 
@@ -399,7 +399,7 @@
                 await System.Windows.Application.Current.Dispatcher.InvokeAsync(async () => { if (Clipboard.ContainsImage()) { var bitmap = Clipboard.GetImage(); byte[] imgBytes; var pngEncoder = new PngBitmapEncoder(); pngEncoder.Frames.Add(BitmapFrame.Create(bitmap)); using (var ms = new MemoryStream()) { pngEncoder.Save(ms); imgBytes = ms.ToArray(); } string extractedText = await OcrService.ExtractTextFromImage(imgBytes); if (!string.IsNullOrWhiteSpace(extractedText)) { Clipboard.SetText(extractedText); await JS.InvokeVoidAsync("alert", $"[캡처 완료]\n텍스트 복사됨:\n\n{extractedText}"); } else { await JS.InvokeVoidAsync("alert", "OCR: 글자 없음"); } } });
             } 
             isSnapshotMode = false; drawingPage = -1;
-            // 캡처는 보통 1회성이므로 풀리는게 낫지만, 원하시면 여기도 activeMode="INFO" 제거 가능
+            // 캡처는 1회성이므로 풀리는게 좋지만, 원하시면 여기도 유지 가능 (현재는 풀림)
             await InvokeAsync(() => { SetMode("INFO"); StateHasChanged(); });
         } 
     }
@@ -452,10 +452,31 @@
     private void SavePdf() { if (activeDoc == null) return;
         try { var finalBytes = PdfService.SavePdfWithAnnotations(activeDoc.Data, activeDoc.Annotations, activeDoc.Scale); File.WriteAllBytes(activeDoc.FilePath, finalBytes); activeDoc.Data = finalBytes; JS.InvokeVoidAsync("alert", "저장 완료!");
         } catch (Exception ex) { JS.InvokeVoidAsync("alert", "저장 실패: " + ex.Message); } }
-    private void SavePdfAs() { if (activeDoc == null) return;
+
+    // [수정] 충돌 방지: async Task로 변경하고, 저장 전 모드 초기화 및 딜레이 추가
+    private async Task SavePdfAs() { 
+        if (activeDoc == null) return;
+        
+        // 안전장치: 오버레이 제거 및 UI 스레드 안정화
+        SetMode("INFO"); 
+        StateHasChanged(); 
+        await Task.Delay(100); 
+
         var dlg = new SaveFileDialog { FileName = activeDoc.FileName, DefaultExt = ".pdf", Filter = "PDF documents (.pdf)|*.pdf" };
-        if (dlg.ShowDialog() == true) { try { var finalBytes = PdfService.SavePdfWithAnnotations(activeDoc.Data, activeDoc.Annotations, activeDoc.Scale); File.WriteAllBytes(dlg.FileName, finalBytes); activeDoc.FilePath = dlg.FileName;
-            activeDoc.FileName = System.IO.Path.GetFileName(dlg.FileName); activeDoc.Data = finalBytes; StateHasChanged(); } catch {} } }
+        if (dlg.ShowDialog() == true) { 
+            try { 
+                var finalBytes = PdfService.SavePdfWithAnnotations(activeDoc.Data, activeDoc.Annotations, activeDoc.Scale); 
+                File.WriteAllBytes(dlg.FileName, finalBytes); 
+                activeDoc.FilePath = dlg.FileName;
+                activeDoc.FileName = System.IO.Path.GetFileName(dlg.FileName); 
+                activeDoc.Data = finalBytes; 
+                StateHasChanged(); 
+            } catch (Exception ex) {
+                // 혹시 모를 오류 대비
+                await JS.InvokeVoidAsync("alert", "저장 실패: " + ex.Message);
+            }
+        } 
+    }
     
     [JSInvokable] public void OnDeleteSelected() => DeleteSelected();
     private void DeleteSelected() { if (activeDoc?.SelectedAnnotation != null) { SaveState(); activeDoc.Annotations.Remove(activeDoc.SelectedAnnotation); activeDoc.SelectedAnnotation = null; } }
@@ -489,7 +510,8 @@
     private async Task SwitchToPagesTab() { activeTab = "PAGES"; StateHasChanged(); await Task.Delay(50); await RenderThumbnails(); await JS.InvokeVoidAsync("registerSidebarZoomEvent", "sidebar-thumbnails"); }
     private void StartResizeSidebar(MouseEventArgs e) => isSidebarResizing = true;
     private void ToggleSidebar() => isSidebarOpen = !isSidebarOpen;
-    // [수정] 모드 토글 로직: 이미 선택된 모드면 INFO로 복귀
+    
+    // [수정] 모드 토글: 이미 선택된 모드를 다시 누르면 OFF
     private void SetMode(string mode) {
         if (activeMode == mode) activeMode = "INFO";
         else activeMode = mode;
