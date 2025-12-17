@@ -71,11 +71,19 @@
 
             window.addEventListener('keydown', (e) => {
                 if (e.ctrlKey && (e.key === 'f' || e.key === 'F')) { e.preventDefault(); pdfState.dotNetRef.invokeMethodAsync('OnCtrlF'); return; }
-                if (e.key === 'Delete') { if (document.activeElement.tagName !== 'TEXTAREA' && document.activeElement.tagName !== 'INPUT') pdfState.dotNetRef.invokeMethodAsync('OnDeleteSelected'); }
+                
+                // [수정] Delete 키 또는 Backspace 키로 삭제 가능
+                // 단, 텍스트 박스 입력 중(TEXTAREA, INPUT)일 때는 글자를 지워야 하므로 삭제 이벤트 실행 안 함
+                if (e.key === 'Delete' || e.key === 'Backspace') { 
+                    if (document.activeElement.tagName !== 'TEXTAREA' && document.activeElement.tagName !== 'INPUT') {
+                        pdfState.dotNetRef.invokeMethodAsync('OnDeleteSelected'); 
+                    }
+                }
+                
                 if (e.ctrlKey && (e.key === 'z' || e.key === 'Z')) pdfState.dotNetRef.invokeMethodAsync('OnUndo');
             });
 
-            // [수정] 텍스트 선택 감지 (모드 분리로 인해 충돌 없음)
+            // 텍스트 선택 감지
             document.addEventListener('selectionchange', () => {
                 var selection = window.getSelection();
                 if (!selection || selection.rangeCount === 0 || selection.toString().trim().length === 0) {
@@ -83,12 +91,12 @@
                 }
             });
 
-            // [핵심] 마우스를 뗐을 때 선택된 텍스트가 있으면 좌표를 보냄
+            // 마우스 업 시 선택 좌표 전달
             document.addEventListener('mouseup', (e) => {
                 if (e.target.closest('.selection-popup')) return;
                 
                 setTimeout(() => {
-                    handleTextSelection(e.clientX, e.clientY); // 마우스 좌표 직접 전달
+                    handleTextSelection(e.clientX, e.clientY);
                 }, 50);
             });
         };
@@ -125,14 +133,12 @@
             } catch (err) { } finally { delete pdfState.renderTasks[pageNum]; }
         };
 
-        // [수정] 좌표 계산 로직 단순화 (화면 기준 고정 좌표 사용)
         function handleTextSelection(mouseX, mouseY) {
             if (!pdfState.dotNetRef) return;
             var selection = window.getSelection();
             
             if (selection && selection.toString().trim().length > 0) {
                 try {
-                    // 선택된 텍스트가 어느 페이지에 있는지 확인
                     var anchorNode = selection.anchorNode;
                     if (anchorNode.nodeType === 3) anchorNode = anchorNode.parentNode;
                     var pageEl = anchorNode.closest('.page-container');
@@ -140,7 +146,6 @@
                     if (pageEl) {
                         var pageNum = parseInt(pageEl.getAttribute('data-page-number'));
                         
-                        // 하이라이트 저장을 위한 PDF 내부 상대 좌표 계산
                         var range = selection.getRangeAt(0);
                         var rect = range.getBoundingClientRect();
                         var container = document.getElementById('pdf-container');
@@ -149,7 +154,6 @@
                         var relativeX = rect.left - containerRect.left + container.scrollLeft;
                         var relativeY = rect.top - containerRect.top + container.scrollTop;
 
-                        // C#으로 전송 (화면 좌표 mouseX/Y는 팝업 위치용, relativeX/Y는 저장용)
                         var popupX = mouseX || rect.right;
                         var popupY = mouseY || rect.top;
 
