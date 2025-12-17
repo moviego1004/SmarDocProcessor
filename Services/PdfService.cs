@@ -9,6 +9,7 @@ using PdfSharp.Fonts;
 using Windows.Media.Ocr;
 using System.Text.Json; 
 using PdfSharp.Pdf.Annotations; 
+using PdfSharp.Pdf.AcroForms;
 
 namespace SmartDocProcessor.Services
 {
@@ -57,7 +58,6 @@ namespace SmartDocProcessor.Services
         }
     }
 
-    // [핵심 해결] PdfDictionary 대신 PdfAnnotation을 상속받는 클래스 정의
     public class PdfGenericAnnotation : PdfAnnotation
     {
         public PdfGenericAnnotation(PdfDocument document) : base(document)
@@ -105,9 +105,25 @@ namespace SmartDocProcessor.Services
                 var editableAnns = annotations.Where(a => a.Type != "OCR_TEXT").ToList();
                 doc.Info.Keywords = "[SMARTDOC]" + JsonSerializer.Serialize(editableAnns);
 
+                // [수정] AcroForm을 직접 생성하지 않고 접근합니다. (PdfSharp이 자동 생성함)
+                // NeedAppearances: 외부 뷰어에게 주석 모양을 자동으로 그려달라고 요청하는 플래그
+                try {
+                    if (doc.AcroForm.Elements.ContainsKey("/NeedAppearances"))
+                    {
+                        doc.AcroForm.Elements["/NeedAppearances"] = new PdfBoolean(true);
+                    }
+                    else
+                    {
+                        doc.AcroForm.Elements.Add("/NeedAppearances", new PdfBoolean(true));
+                    }
+                }
+                catch { 
+                    // 혹시 AcroForm 접근이 실패해도 진행 (필수는 아님)
+                }
+
                 var annsByPage = annotations.GroupBy(a => a.Page);
 
-                // 기존 주석 초기화 (중복 방지)
+                // 기존 주석 초기화
                 foreach (var page in doc.Pages) 
                 {
                     if(page.Annotations != null) page.Annotations.Clear();
@@ -142,7 +158,6 @@ namespace SmartDocProcessor.Services
 
                         if (ann.Type.StartsWith("HIGHLIGHT"))
                         {
-                            // [수정] PdfDictionary -> PdfGenericAnnotation 사용
                             var annot = new PdfGenericAnnotation(doc);
                             annot.Elements.SetName(PdfAnnotation.Keys.Type, "/Annot");
                             annot.Elements.SetName(PdfAnnotation.Keys.Subtype, "/Highlight");
@@ -151,7 +166,15 @@ namespace SmartDocProcessor.Services
                             var color = ann.Type == "HIGHLIGHT_O" ? XColor.FromArgb(255, 165, 0) : XColor.FromArgb(255, 255, 0);
                             annot.Elements["/C"] = new PdfArray(doc, new PdfReal(color.R / 255.0), new PdfReal(color.G / 255.0), new PdfReal(color.B / 255.0));
                             
-                            page.Annotations.Add(annot); // 이제 에러 없이 추가됨
+                            // QuadPoints 설정 (외부 뷰어 가시성 핵심)
+                            var qp = new PdfArray(doc);
+                            qp.Elements.Add(new PdfReal(rect.X1)); qp.Elements.Add(new PdfReal(rect.Y2)); // Top-Left
+                            qp.Elements.Add(new PdfReal(rect.X2)); qp.Elements.Add(new PdfReal(rect.Y2)); // Top-Right
+                            qp.Elements.Add(new PdfReal(rect.X1)); qp.Elements.Add(new PdfReal(rect.Y1)); // Bottom-Left
+                            qp.Elements.Add(new PdfReal(rect.X2)); qp.Elements.Add(new PdfReal(rect.Y1)); // Bottom-Right
+                            annot.Elements["/QuadPoints"] = qp;
+
+                            page.Annotations.Add(annot);
                         }
                         else if (ann.Type == "UNDERLINE")
                         {
@@ -161,6 +184,13 @@ namespace SmartDocProcessor.Services
                             annot.Elements.SetRectangle(PdfAnnotation.Keys.Rect, rect);
                             annot.Elements["/C"] = new PdfArray(doc, new PdfReal(1), new PdfReal(0), new PdfReal(0)); // Red
                             
+                            var qp = new PdfArray(doc);
+                            qp.Elements.Add(new PdfReal(rect.X1)); qp.Elements.Add(new PdfReal(rect.Y2));
+                            qp.Elements.Add(new PdfReal(rect.X2)); qp.Elements.Add(new PdfReal(rect.Y2));
+                            qp.Elements.Add(new PdfReal(rect.X1)); qp.Elements.Add(new PdfReal(rect.Y1));
+                            qp.Elements.Add(new PdfReal(rect.X2)); qp.Elements.Add(new PdfReal(rect.Y1));
+                            annot.Elements["/QuadPoints"] = qp;
+
                             page.Annotations.Add(annot);
                         }
                         else if (ann.Type == "TEXT")
@@ -170,7 +200,16 @@ namespace SmartDocProcessor.Services
                             annot.Elements.SetName(PdfAnnotation.Keys.Subtype, "/FreeText");
                             annot.Elements.SetRectangle(PdfAnnotation.Keys.Rect, rect);
                             annot.Elements.SetString("/Contents", ann.Content);
-                            annot.Elements["/DA"] = new PdfString($"/Helv {ann.FontSize} Tf {ann.Color} rg");
+                            
+                            // 색상 변환
+                            XColor c = XColor.FromArgb(
+                                int.Parse(ann.Color.Substring(1, 2), System.Globalization.NumberStyles.HexNumber),
+                                int.Parse(ann.Color.Substring(3, 2), System.Globalization.NumberStyles.HexNumber),
+                                int.Parse(ann.Color.Substring(5, 2), System.Globalization.NumberStyles.HexNumber));
+                            
+                            double r = c.R / 255.0; double g = c.G / 255.0; double b = c.B / 255.0;
+                            // Default Appearance (/DA) 설정: 외부 뷰어가 이 정보를 보고 텍스트를 그립니다.
+                            annot.Elements["/DA"] = new PdfString($"/Helv {ann.FontSize} Tf {r:0.##} {g:0.##} {b:0.##} rg");
                             
                             page.Annotations.Add(annot);
                         }
