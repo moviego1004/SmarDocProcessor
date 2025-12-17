@@ -7,30 +7,13 @@ html, body {
 
 .main-layout { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 
-/* 툴바 (수정됨) */
+/* 툴바 */
 .ribbon-bar {
-    height: 50px; 
-    background: #f3f2f1; 
-    border-bottom: 1px solid #ccc;
-    display: flex; 
-    align-items: center; 
-    padding: 0 10px; 
-    gap: 5px;
-    flex-shrink: 0; 
-    position: relative; 
-    z-index: 30; 
-    white-space: nowrap;
-    
-    /* [수정 1] 가로 스크롤 허용하되 스크롤바는 숨김 */
-    overflow-x: auto; 
-    overflow-y: hidden;
-    scrollbar-width: none; /* Firefox용 */
+    height: 50px; background: #f3f2f1; border-bottom: 1px solid #ccc;
+    display: flex; align-items: center; padding: 0 10px; gap: 5px;
+    flex-shrink: 0; position: relative; z-index: 30; 
+    white-space: nowrap; overflow: visible;
 }
-/* Chrome, Safari용 스크롤바 숨김 */
-.ribbon-bar::-webkit-scrollbar { 
-    display: none; 
-}
-
 .tool-section { display: flex; align-items: center; gap: 4px; }
 .divider { width: 1px; height: 24px; background: #ccc; margin: 0 8px; }
 
@@ -55,33 +38,30 @@ html, body {
 .doc-tab .close-tab { width: 16px; height: 16px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #666; }
 .doc-tab .close-tab:hover { background: #ffcccc; color: red; }
 
-/* 반응형 & 더보기 버튼 (수정됨) */
+/* 반응형 설정 */
+.responsive-hide, .responsive-tool-section { display: flex; align-items: center; }
 .more-btn { 
     display: none; 
     font-weight: bold; font-size: 18px; padding: 0 10px; 
     cursor: pointer; border: none; background: transparent; 
-    
-    /* [수정 2] 오른쪽 끝에 고정 (Sticky) */
-    position: sticky !important;
-    right: 0;
-    background-color: #f3f2f1; /* 배경색을 넣어 뒤쪽 아이콘이 비치지 않게 함 */
-    z-index: 50;
-    box-shadow: -5px 0 10px -5px rgba(0,0,0,0.1); /* 살짝 그림자 추가 */
 }
 
-/* 1300px 이하에서 메뉴 숨기고 더보기 버튼 보이기 (기존 유지) */
+/* 1300px 이하일 때: 도구 모음(Search, Highlight 등)과 편집 모음(Delete 등) 모두 숨기고 더보기 버튼 표시 */
 @media (max-width: 1300px) {
-    .responsive-hide { display: none !important; }
+    .responsive-hide, .responsive-tool-section { display: none !important; }
     .more-btn { display: block !important; }
 }
 
+/* 더보기 메뉴 스타일 */
 .overflow-menu {
-    position: absolute; top: 50px; right: 0; background: white;
-    border: 1px solid #ccc; box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    position: fixed; top: 50px; right: 10px; background: white;
+    border: 1px solid #ccc; box-shadow: 0 4px 12px rgba(0,0,0,0.2);
     padding: 10px; display: flex; flex-direction: column; gap: 10px;
-    z-index: 1000; min-width: 220px;
+    z-index: 2000; min-width: 240px; border-radius: 4px;
 }
-.overflow-row { display: flex; align-items: center; justify-content: space-between; font-size: 13px; }
+.overflow-section-label { font-size: 12px; font-weight: bold; color: #666; margin-bottom: 4px; }
+.overflow-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+.overflow-menu .icon-btn { justify-content: flex-start; }
 
 /* 공통 버튼 */
 .icon-btn { border: 1px solid transparent; background: transparent; padding: 4px 8px; cursor: pointer; display: flex; align-items: center; gap: 4px; border-radius: 3px; font-size: 13px; }
@@ -93,7 +73,6 @@ html, body {
 
 /* 속성 패널 */
 .property-panel { background: #fff; border: 1px solid #ddd; border-radius: 4px; padding: 3px 8px; display: flex; align-items: center; }
-.small-label { font-size: 11px; margin-right: 5px; color: #555; }
 .color-picker { width: 30px; height: 24px; border: none; cursor: pointer; vertical-align: middle; margin-right: 5px; }
 .size-picker { height: 24px; font-size: 12px; border: 1px solid #ccc; border-radius: 3px; vertical-align: middle; }
 .apply-btn { background: #0078d4; color: white; border: none; padding: 2px 8px; font-size: 11px; border-radius: 3px; cursor: pointer; margin-left: 5px; }
@@ -120,7 +99,7 @@ html, body {
 
 .page-wrapper canvas { position: absolute; left: 0; top: 0; z-index: 1; }
 
-/* [중요] 텍스트 레이어 */
+/* 텍스트 레이어 */
 .textLayer { 
     position: absolute; left: 0; top: 0; right: 0; bottom: 0;
     z-index: 5; /* 캔버스 위 */
@@ -130,11 +109,6 @@ html, body {
     pointer-events: auto;
     user-select: text !important;
     -webkit-user-select: text !important;
-}
-
-/* [핵심 수정] 그리기 모드(형광펜, 캡처)일 땐 텍스트 레이어 이벤트를 무시하여 그리기가 되도록 함 */
-.drawing-mode .textLayer {
-    pointer-events: none !important;
 }
 
 .textLayer span { color: transparent; position: absolute; white-space: pre; cursor: text; transform-origin: 0% 0%; }
@@ -152,56 +126,30 @@ html, body {
 .animate-fade-in { animation: fadeIn 0.2s ease-in-out; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
 
-/* 플로팅 툴바 (기존 스타일 - 아래에서 덮어씌워짐) */
+/* 텍스트 선택 팝업 (Fixed로 변경됨) */
 .selection-popup {
-    position: absolute; background: #444; color: white;
-    border-radius: 6px; padding: 6px 10px; display: flex; gap: 8px;
-    z-index: 9999; box-shadow: 0 4px 15px rgba(0,0,0,0.4); align-items: center;
+    position: fixed !important; 
+    z-index: 20000 !important;
+    background: #333; color: white;
+    padding: 6px; border-radius: 4px;
+    display: flex; gap: 8px; align-items: center;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    pointer-events: auto !important;
 }
 .selection-popup::after {
     content: ""; position: absolute; top: 100%; left: 50%; margin-left: -6px;
-    border-width: 6px; border-style: solid; border-color: #444 transparent transparent transparent;
+    border-width: 6px; border-style: solid; border-color: #333 transparent transparent transparent;
 }
-.popup-btn { cursor: pointer; padding: 4px; border-radius: 4px; display: flex; align-items: center; justify-content: center; color: #eee; font-size: 16px; transition: background 0.2s; }
+.popup-btn { 
+    cursor: pointer; padding: 4px; border-radius: 4px; 
+    display: flex; align-items: center; justify-content: center; 
+    color: #eee; font-size: 16px; transition: background 0.2s; 
+}
 .popup-btn:hover { background: #666; color: white; }
 .popup-divider { width: 1px; height: 18px; background: #666; margin: 0 2px; }
-.color-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
 
-
-/* ========================================================== */
-/* [핵심 수정 사항] 아래 내용이 추가되어 정상 작동합니다.  */
-/* ========================================================== */
-
-/* [핵심] 그리기 모드일 때는 텍스트 선택 레이어를 숨겨서 캔버스에 바로 그림이 그려지게 함 */
-.drawing-mode .textLayer {
-    pointer-events: none !important;
-    display: none !important; /* 이 줄이 꼭 있어야 합니다 */
-}
-
-/* 텍스트 선택 시 팝업을 화면 맨 위에 고정 (스크롤 영향 받지 않음) */
-.selection-popup {
-    position: fixed !important; /* absolute -> fixed로 변경 필수 */
-    z-index: 20000 !important;
-    background: #333;
-    color: white;
-    padding: 6px;
-    border-radius: 4px;
-    display: flex;
-    gap: 8px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-    pointer-events: auto !important;
-    align-items: center;
-}
-
-.popup-btn {
-    cursor: pointer;
-    padding: 4px 8px;
-    border-radius: 4px;
+/* 그리기 전용 오버레이 스타일 (필수) */
+.drawing-overlay {
     background: transparent;
-    transition: background 0.2s;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #eee;
+    /* 커서는 인라인 스타일에서 제어함 */
 }
-.popup-btn:hover { background: #555; color: white; }
