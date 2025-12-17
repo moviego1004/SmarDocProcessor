@@ -7,13 +7,30 @@ html, body {
 
 .main-layout { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 
-/* 툴바 */
+/* 툴바 (수정됨) */
 .ribbon-bar {
-    height: 50px; background: #f3f2f1; border-bottom: 1px solid #ccc;
-    display: flex; align-items: center; padding: 0 10px; gap: 5px;
-    flex-shrink: 0; position: relative; z-index: 30; 
-    white-space: nowrap; overflow: visible;
+    height: 50px; 
+    background: #f3f2f1; 
+    border-bottom: 1px solid #ccc;
+    display: flex; 
+    align-items: center; 
+    padding: 0 10px; 
+    gap: 5px;
+    flex-shrink: 0; 
+    position: relative; 
+    z-index: 30; 
+    white-space: nowrap;
+    
+    /* [수정 1] 가로 스크롤 허용하되 스크롤바는 숨김 */
+    overflow-x: auto; 
+    overflow-y: hidden;
+    scrollbar-width: none; /* Firefox용 */
 }
+/* Chrome, Safari용 스크롤바 숨김 */
+.ribbon-bar::-webkit-scrollbar { 
+    display: none; 
+}
+
 .tool-section { display: flex; align-items: center; gap: 4px; }
 .divider { width: 1px; height: 24px; background: #ccc; margin: 0 8px; }
 
@@ -38,15 +55,21 @@ html, body {
 .doc-tab .close-tab { width: 16px; height: 16px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #666; }
 .doc-tab .close-tab:hover { background: #ffcccc; color: red; }
 
-/* 반응형 & 더보기 버튼 */
-.responsive-hide { display: flex; align-items: center; }
+/* 반응형 & 더보기 버튼 (수정됨) */
 .more-btn { 
     display: none; 
     font-weight: bold; font-size: 18px; padding: 0 10px; 
     cursor: pointer; border: none; background: transparent; 
+    
+    /* [수정 2] 오른쪽 끝에 고정 (Sticky) */
+    position: sticky !important;
+    right: 0;
+    background-color: #f3f2f1; /* 배경색을 넣어 뒤쪽 아이콘이 비치지 않게 함 */
+    z-index: 50;
+    box-shadow: -5px 0 10px -5px rgba(0,0,0,0.1); /* 살짝 그림자 추가 */
 }
 
-/* 1300px 이하에서 메뉴 숨기고 더보기 버튼 보이기 (기준 완화) */
+/* 1300px 이하에서 메뉴 숨기고 더보기 버튼 보이기 (기존 유지) */
 @media (max-width: 1300px) {
     .responsive-hide { display: none !important; }
     .more-btn { display: block !important; }
