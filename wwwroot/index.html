@@ -29,8 +29,6 @@
         .grab { cursor: grab !important; }
         .grabbing { cursor: grabbing !important; }
         
-        /* 팝업 스타일은 app.css로 이동됨 */
-
         ::-webkit-scrollbar { width: 14px; }
         ::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 7px; border: 3px solid #525659; }
         ::-webkit-scrollbar-track { background: #525659; }
@@ -72,8 +70,7 @@
             window.addEventListener('keydown', (e) => {
                 if (e.ctrlKey && (e.key === 'f' || e.key === 'F')) { e.preventDefault(); pdfState.dotNetRef.invokeMethodAsync('OnCtrlF'); return; }
                 
-                // [수정] Delete 키 또는 Backspace 키로 삭제 가능
-                // 단, 텍스트 박스 입력 중(TEXTAREA, INPUT)일 때는 글자를 지워야 하므로 삭제 이벤트 실행 안 함
+                // [수정] Backspace 키 지원 추가
                 if (e.key === 'Delete' || e.key === 'Backspace') { 
                     if (document.activeElement.tagName !== 'TEXTAREA' && document.activeElement.tagName !== 'INPUT') {
                         pdfState.dotNetRef.invokeMethodAsync('OnDeleteSelected'); 
@@ -83,7 +80,6 @@
                 if (e.ctrlKey && (e.key === 'z' || e.key === 'Z')) pdfState.dotNetRef.invokeMethodAsync('OnUndo');
             });
 
-            // 텍스트 선택 감지
             document.addEventListener('selectionchange', () => {
                 var selection = window.getSelection();
                 if (!selection || selection.rangeCount === 0 || selection.toString().trim().length === 0) {
@@ -91,13 +87,9 @@
                 }
             });
 
-            // 마우스 업 시 선택 좌표 전달
             document.addEventListener('mouseup', (e) => {
                 if (e.target.closest('.selection-popup')) return;
-                
-                setTimeout(() => {
-                    handleTextSelection(e.clientX, e.clientY);
-                }, 50);
+                setTimeout(() => { handleTextSelection(e.clientX, e.clientY); }, 50);
             });
         };
 
@@ -106,20 +98,15 @@
             var canvas = document.getElementById(canvasId); 
             var wrapper = document.getElementById(wrapperId); 
             var textLayerDiv = document.getElementById(textLayerId);
-            
             if (pdfState.renderTasks[pageNum]) { try { await pdfState.renderTasks[pageNum].cancel(); } catch (e) { } }
-
             var page = await pdfState.pdfDoc.getPage(pageNum); 
             var viewport = page.getViewport({ scale: scale });
-
             canvas.width = viewport.width; canvas.height = viewport.height; 
             canvas.style.width = `${viewport.width}px`; canvas.style.height = `${viewport.height}px`;
             if (wrapper) { wrapper.style.width = `${viewport.width}px`; wrapper.style.height = `${viewport.height}px`; }
-
             var context = canvas.getContext('2d'); 
             var renderTask = page.render({ canvasContext: context, viewport: viewport }); 
             pdfState.renderTasks[pageNum] = renderTask;
-
             try {
                 await renderTask.promise;
                 if (textLayerDiv) {
@@ -136,27 +123,21 @@
         function handleTextSelection(mouseX, mouseY) {
             if (!pdfState.dotNetRef) return;
             var selection = window.getSelection();
-            
             if (selection && selection.toString().trim().length > 0) {
                 try {
                     var anchorNode = selection.anchorNode;
                     if (anchorNode.nodeType === 3) anchorNode = anchorNode.parentNode;
                     var pageEl = anchorNode.closest('.page-container');
-                    
                     if (pageEl) {
                         var pageNum = parseInt(pageEl.getAttribute('data-page-number'));
-                        
                         var range = selection.getRangeAt(0);
                         var rect = range.getBoundingClientRect();
                         var container = document.getElementById('pdf-container');
                         var containerRect = container.getBoundingClientRect();
-                        
                         var relativeX = rect.left - containerRect.left + container.scrollLeft;
                         var relativeY = rect.top - containerRect.top + container.scrollTop;
-
                         var popupX = mouseX || rect.right;
                         var popupY = mouseY || rect.top;
-
                         pdfState.dotNetRef.invokeMethodAsync('OnTextSelected', popupX, popupY, relativeX, relativeY, rect.width, rect.height, pageNum, selection.toString());
                     }
                 } catch (e) { console.error(e); }
@@ -169,19 +150,7 @@
         window.loadPdfDocument = async (pdfData) => { var data = new Uint8Array(pdfData); if(pdfState.pdfDoc) pdfState.pdfDoc.destroy(); pdfState.pdfDoc = await pdfjsLib.getDocument({ data: data }).promise; return pdfState.pdfDoc.numPages; };
         window.renderThumbnail = async (pageNum, canvasId, scale) => { if (!pdfState.pdfDoc) return; var canvas = document.getElementById(canvasId); if(!canvas) return; try { var page = await pdfState.pdfDoc.getPage(pageNum); var viewport = page.getViewport({ scale: scale }); canvas.width = viewport.width; canvas.height = viewport.height; canvas.style.width = `${viewport.width}px`; canvas.style.height = `${viewport.height}px`; var context = canvas.getContext('2d'); await page.render({ canvasContext: context, viewport: viewport }).promise; } catch(e) { } };
         window.getFitScale = async (type) => { if (!pdfState.pdfDoc) return 1.0; const container = document.getElementById('pdf-container'); const page = await pdfState.pdfDoc.getPage(1); const viewport = page.getViewport({ scale: 1.0 }); const availWidth = container.clientWidth - 40; const availHeight = container.clientHeight - 40; if (type === 'width') return availWidth / viewport.width; else return availHeight / viewport.height; };
-        
-        window.getPageImageBase64 = async (pageNum) => {
-            if (!pdfState.pdfDoc) return null;
-            var page = await pdfState.pdfDoc.getPage(pageNum);
-            var viewport = page.getViewport({ scale: 3.0 }); 
-            var canvas = document.createElement('canvas');
-            canvas.width = viewport.width; canvas.height = viewport.height;
-            var context = canvas.getContext('2d');
-            await page.render({ canvasContext: context, viewport: viewport }).promise;
-            var dataUrl = canvas.toDataURL('image/png');
-            return dataUrl.split(',')[1];
-        };
-
+        window.getPageImageBase64 = async (pageNum) => { if (!pdfState.pdfDoc) return null; var page = await pdfState.pdfDoc.getPage(pageNum); var viewport = page.getViewport({ scale: 3.0 }); var canvas = document.createElement('canvas'); canvas.width = viewport.width; canvas.height = viewport.height; var context = canvas.getContext('2d'); await page.render({ canvasContext: context, viewport: viewport }).promise; var dataUrl = canvas.toDataURL('image/png'); return dataUrl.split(',')[1]; };
         window.copySnapshot = async (x, y, w, h, pageNum) => { var canvas = document.getElementById('canvas-' + pageNum); if (!canvas) return; var tempCanvas = document.createElement('canvas'); tempCanvas.width = w; tempCanvas.height = h; var ctx = tempCanvas.getContext('2d'); ctx.drawImage(canvas, x, y, w, h, 0, 0, w, h); try { var blob = await new Promise(resolve => tempCanvas.toBlob(resolve)); await navigator.clipboard.write([ new ClipboardItem({ 'image/png': blob }) ]); } catch (err) { alert("복사 실패"); } };
         window.registerZoomEvent = (containerId) => { }; 
         window.setupPageObserver = () => { if (pdfState.observer) pdfState.observer.disconnect(); let options = { root: document.getElementById('pdf-container'), rootMargin: '0px', threshold: 0.5 }; pdfState.observer = new IntersectionObserver((entries) => { entries.forEach(entry => { if (entry.isIntersecting) { let pageNum = parseInt(entry.target.getAttribute('data-page-number')); if(pdfState.dotNetRef) pdfState.dotNetRef.invokeMethodAsync('OnPageVisible', pageNum); } }); }, options); document.querySelectorAll('.page-container').forEach(el => { pdfState.observer.observe(el); }); };
@@ -189,7 +158,6 @@
         window.registerSidebarZoomEvent = (elementId) => { var el = document.getElementById(elementId); if (!el) return; el.onwheel = null; el.addEventListener('wheel', (e) => { if (e.ctrlKey) { e.preventDefault(); e.stopPropagation(); if (e.deltaY < 0) pdfState.dotNetRef.invokeMethodAsync('OnThumbnailZoomIn'); else pdfState.dotNetRef.invokeMethodAsync('OnThumbnailZoomOut'); } }, { passive: false }); };
         window.focusElement = (id) => { setTimeout(() => { var el = document.getElementById(id); if(el) { el.focus(); el.select(); } }, 50); };
         window.autoResize = (el) => { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; };
-        
         window.downloadFile = (filename, base64Content) => { var link = document.createElement('a'); link.download = filename; link.href = "data:application/pdf;base64," + base64Content; document.body.appendChild(link); link.click(); document.body.removeChild(link); };
     </script>
 </body>
