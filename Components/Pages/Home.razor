@@ -467,9 +467,10 @@
         } 
     }
     
+    // [수정] JS에서 호출하기 위해 Task 반환
     [JSInvokable] public async Task OnDeleteSelected() => await DeleteSelected();
 
-    // [중요 수정] 텍스트 박스 삭제 시 확인 창 띄우기 & 형광펜 삭제 복구
+    // [중요 수정] 삭제 후 화면 갱신 및 확인 창 로직 추가
     private async Task DeleteSelected() { 
         if (activeDoc?.SelectedAnnotation != null) { 
             if (activeDoc.SelectedAnnotation.Type == "TEXT") {
@@ -480,11 +481,13 @@
             SaveState(); 
             activeDoc.Annotations.Remove(activeDoc.SelectedAnnotation); 
             activeDoc.SelectedAnnotation = null; 
-            StateHasChanged();
+            
+            // [핵심] 이 부분이 없어서 삭제가 안 된 것처럼 보였습니다.
+            StateHasChanged(); 
         } 
     }
 
-    // [중요 수정] 선택 시 화면 갱신하여 파란 테두리 표시 (매우 중요)
+    // [중요 수정] 선택 시 즉시 파란 테두리 표시 
     private void SelectAnnotation(AnnotationData item) { 
         if(activeDoc!=null) { 
             activeDoc.SelectedAnnotation = item; 

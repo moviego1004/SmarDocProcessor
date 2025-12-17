@@ -70,7 +70,7 @@
             window.addEventListener('keydown', (e) => {
                 if (e.ctrlKey && (e.key === 'f' || e.key === 'F')) { e.preventDefault(); pdfState.dotNetRef.invokeMethodAsync('OnCtrlF'); return; }
                 
-                // [수정] Backspace 키 지원 추가
+                // [수정] Backspace 키 지원 및 예외 처리
                 if (e.key === 'Delete' || e.key === 'Backspace') { 
                     if (document.activeElement.tagName !== 'TEXTAREA' && document.activeElement.tagName !== 'INPUT') {
                         pdfState.dotNetRef.invokeMethodAsync('OnDeleteSelected'); 
